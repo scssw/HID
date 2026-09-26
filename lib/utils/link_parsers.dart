@@ -45,13 +45,14 @@ abstract class LinkParser {
     final lines = normalContent.split('\n');
     String? name;
     for (final line in lines) {
-      final uri = Uri.tryParse(line);
+      final trimmedLine = line.trim();
+      final uri = Uri.tryParse(trimmedLine);
       if (uri == null) continue;
       final fragment = uri.hasFragment ? Uri.decodeComponent(uri.fragment.split("&&detour")[0]) : null;
       name ??= switch (uri.scheme) {
         'ss' => fragment ?? ProxyType.shadowsocks.label,
         'ssconf' => fragment ?? ProxyType.shadowsocks.label,
-        'vmess' => ProxyType.vmess.label,
+        'vmess' => parseVmessRemark(trimmedLine) ?? fragment ?? ProxyType.vmess.label,
         'vless' => fragment ?? ProxyType.vless.label,
         'trojan' => fragment ?? ProxyType.trojan.label,
         'tuic' => fragment ?? ProxyType.tuic.label,
@@ -60,6 +61,9 @@ abstract class LinkParser {
         'ssh' => fragment ?? ProxyType.ssh.label,
         'wg' => fragment ?? ProxyType.wireguard.label,
         'warp' => fragment ?? ProxyType.warp.label,
+        'naive' || 'naive+https' || 'naive+http' || 'naive+quic' => fragment ?? ProxyType.naive.label,
+        'phttp' || 'phttps' => fragment ?? ProxyType.http.label,
+        'ssr' => parseSsrRemark(trimmedLine) ?? fragment ?? ProxyType.shadowsocksr.label,
         _ => null,
       };
     }
@@ -103,4 +107,93 @@ String safeDecodeBase64(String str) {
   } catch (e) {
     return str;
   }
+}
+
+String? safeBase64DecodeNullable(String str) {
+  try {
+    var normalized = str.trim().replaceAll('-', '+').replaceAll('_', '/');
+    while (normalized.length % 4 != 0) {
+      normalized += '=';
+    }
+    return utf8.decode(base64Decode(normalized), allowMalformed: true);
+  } catch (_) {
+    return null;
+  }
+}
+
+String? parseSsrRemark(String raw) {
+  try {
+    final trimmed = raw.trim();
+    if (!trimmed.toLowerCase().startsWith('ssr://')) return null;
+
+    var b64 = trimmed.substring(6).trim();
+    String? fragment;
+    final hashIndex = b64.indexOf('#');
+    if (hashIndex != -1) {
+      fragment = Uri.decodeComponent(b64.substring(hashIndex + 1)).trim();
+      b64 = b64.substring(0, hashIndex).trim();
+    }
+
+    final decoded = safeBase64DecodeNullable(b64);
+    if (decoded == null) return fragment;
+
+    // SSR format: host:port:protocol:method:obfs:passwordB64/?remarks=remarksB64&...
+    String query = '';
+    final slashQ = decoded.indexOf('/?');
+    if (slashQ != -1) {
+      query = decoded.substring(slashQ + 2);
+    } else {
+      final q = decoded.indexOf('?');
+      if (q != -1) {
+        query = decoded.substring(q + 1);
+      }
+    }
+
+    if (query.isNotEmpty) {
+      for (final param in query.split('&')) {
+        final kv = param.split('=');
+        if (kv.length == 2 && kv[0].toLowerCase() == 'remarks') {
+          final remark = safeBase64DecodeNullable(kv[1]);
+          if (remark != null && remark.trim().isNotEmpty) {
+            return remark.trim();
+          }
+        }
+      }
+    }
+
+    if (fragment != null && fragment.isNotEmpty) {
+      return fragment;
+    }
+
+    final parts = decoded.split(':');
+    if (parts.length >= 2 && parts[0].isNotEmpty) {
+      return '${parts[0]}:${parts[1]}';
+    }
+  } catch (_) {}
+  return null;
+}
+
+String? parseVmessRemark(String raw) {
+  try {
+    final trimmed = raw.trim();
+    if (!trimmed.toLowerCase().startsWith('vmess://')) return null;
+
+    var b64 = trimmed.substring(8).trim();
+    String? fragment;
+    final hashIndex = b64.indexOf('#');
+    if (hashIndex != -1) {
+      fragment = Uri.decodeComponent(b64.substring(hashIndex + 1)).trim();
+      b64 = b64.substring(0, hashIndex).trim();
+    }
+
+    final decoded = safeBase64DecodeNullable(b64);
+    if (decoded != null) {
+      final data = jsonDecode(decoded);
+      if (data is Map && data['ps'] != null && data['ps'].toString().trim().isNotEmpty) {
+        return data['ps'].toString().trim();
+      }
+    }
+    return fragment;
+  } catch (_) {}
+  return null;
 }

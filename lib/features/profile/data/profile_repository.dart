@@ -12,6 +12,7 @@ import 'package:hiddify/features/profile/data/profile_data_mapper.dart';
 import 'package:hiddify/features/profile/data/profile_data_source.dart';
 import 'package:hiddify/features/profile/data/profile_parser.dart';
 import 'package:hiddify/features/profile/data/profile_path_resolver.dart';
+import 'package:hiddify/features/profile/data/single_node_proxy_default.dart';
 import 'package:hiddify/features/profile/model/profile_entity.dart';
 import 'package:hiddify/features/profile/model/profile_failure.dart';
 import 'package:hiddify/features/profile/model/profile_sort_enum.dart';
@@ -198,7 +199,9 @@ class ProfileRepositoryImpl with ExceptionHandler, InfraLogger implements Profil
 
         try {
           await tempFile.writeAsString(content);
-          return await validateConfig(file.path, tempFile.path, false).run();
+          final result = await validateConfig(file.path, tempFile.path, false).run();
+          if (result.isRight()) await _selectOnlyProxyAsDefault(file);
+          return result;
         } finally {
           if (tempFile.existsSync()) tempFile.deleteSync();
         }
@@ -408,6 +411,7 @@ class ProfileRepositoryImpl with ExceptionHandler, InfraLogger implements Profil
           return await validateConfig(file.path, tempFile.path, false)
               .andThen(
                 () => TaskEither(() async {
+                  await _selectOnlyProxyAsDefault(file);
                   final profile = ProfileParser.parse(url, headers);
                   return right(profile);
                 }),
@@ -418,6 +422,39 @@ class ProfileRepositoryImpl with ExceptionHandler, InfraLogger implements Profil
         }
       },
     );
+  }
+
+
+  Future<void> _selectOnlyProxyAsDefault(File file) async {
+    if (!Platform.isWindows) return;
+
+    try {
+      final config = await file.readAsString();
+      final updatedConfig = selectOnlyProxyAsDefault(config);
+      if (updatedConfig != config) await file.writeAsString(updatedConfig);
+      // A single-node config must apply its node default on the next start;
+      // drop any stale cached group selection that would override it.
+      if (updatedConfig != config || hasSingleProxyOutbound(updatedConfig)) {
+        await _clearProxySelectionCache();
+      }
+    } on FileSystemException catch (error, stackTrace) {
+      loggy.warning(
+        'failed to select the only proxy node as default',
+        error,
+        stackTrace,
+      );
+    }
+  }
+
+  Future<void> _clearProxySelectionCache() async {
+    try {
+      final cacheFile = File(
+        '${profilePathResolver.directory.parent.path}${Platform.pathSeparator}clash.db',
+      );
+      if (cacheFile.existsSync()) await cacheFile.delete();
+    } on FileSystemException catch (error, stackTrace) {
+      loggy.warning('failed to clear proxy selection cache', error, stackTrace);
+    }
   }
 
   Future<Map<String, List<String>>> _populateHeaders(
@@ -464,3 +501,5 @@ class ProfileRepositoryImpl with ExceptionHandler, InfraLogger implements Profil
     return headers;
   }
 }
+
+

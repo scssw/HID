@@ -1,0 +1,114 @@
+name: Build & Release macOS
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: 'Release Tag Name (e.g. v3.0.5)'
+        required: false
+        default: 'v3.0.5'
+
+permissions:
+  contents: write
+
+jobs:
+  build-macos:
+    runs-on: macos-14
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2.16.0
+        with:
+          flutter-version: '3.24.0'
+          channel: 'stable'
+          cache: true
+
+      - name: Install macOS build dependencies
+        run: |
+          brew install create-dmg tree
+          npm install -g appdmg
+          dart pub global activate flutter_distributor
+          echo "$HOME/.pub-cache/bin" >> $GITHUB_PATH
+
+      - name: Prepare Libcore binaries
+        run: |
+          mkdir -p libcore/bin
+          echo "Attempting to compile libcore for macOS..."
+          if make build-macos-libs; then
+            echo "Successfully compiled libcore from source."
+          else
+            echo "Compiling libcore failed or skipped, downloading official prebuilt core..."
+            make macos-libs
+          fi
+          if [ ! -f "libcore/bin/libcore.dylib" ]; then
+            echo "libcore.dylib missing, forcing download..."
+            make macos-libs
+          fi
+          ls -la libcore/bin/
+
+      - name: Prepare Flutter code generation & translations
+        run: |
+          make get-geo-assets
+          flutter pub get
+          dart run build_runner build --delete-conflicting-outputs
+          dart run slang
+
+      - name: Build macOS DMG and PKG
+        run: |
+          export PATH="$PATH:$HOME/.pub-cache/bin"
+          flutter_distributor package --platform macos --targets dmg,pkg --skip-clean --build-target lib/main.dart
+
+      - name: Collect output packages
+        id: collect
+        run: |
+          mkdir -p out
+          find dist -type f \( -name "*.dmg" -o -name "*.pkg" \) -exec cp {} out/ \;
+          ls -la out/
+          echo "artifact_count=$(ls -1 out/ | wc -l | tr -d ' ')" >> $GITHUB_OUTPUT
+
+      - name: Upload Artifacts to GitHub
+        uses: actions/upload-artifact@v4
+        with:
+          name: Hiddify-macOS
+          path: out/*
+          retention-days: 14
+
+      - name: Determine Release Tag
+        id: tag
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            TAG="${{ inputs.tag_name }}"
+            [ -z "$TAG" ] && TAG="v3.0.5"
+          elif [[ "${{ github.ref }}" == refs/tags/* ]]; then
+            TAG="${GITHUB_REF#refs/tags/}"
+          else
+            TAG="v3.0.5"
+          fi
+          echo "release_tag=$TAG" >> $GITHUB_OUTPUT
+
+      - name: Create or Update GitHub Release
+        uses: softprops/action-gh-release@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ steps.tag.outputs.release_tag }}
+          name: Hiddify macOS ${{ steps.tag.outputs.release_tag }}
+          draft: false
+          prerelease: false
+          files: out/*
+          body: |
+            ## Hiddify macOS Release (${{ steps.tag.outputs.release_tag }})
+            - Automated macOS build (DMG & PKG)
+            - Architecture: Universal (Apple Silicon & Intel)

@@ -142,6 +142,7 @@ class PlatformSettingsHandler : FlutterPlugin, MethodChannel.MethodCallHandler, 
                             }
                         val list = mutableListOf<AppItem>()
                         installedPackages.forEach {
+                            val appInfo = it.applicationInfo ?: return@forEach
                             if (it.packageName != Application.application.packageName &&
                                 (it.requestedPermissions?.contains(Manifest.permission.INTERNET) == true
                                         || it.packageName == "android")
@@ -149,8 +150,8 @@ class PlatformSettingsHandler : FlutterPlugin, MethodChannel.MethodCallHandler, 
                                 list.add(
                                     AppItem(
                                         it.packageName,
-                                        it.applicationInfo.loadLabel(packageManager).toString(),
-                                        it.applicationInfo.flags and ApplicationInfo.FLAG_SYSTEM == 1
+                                        appInfo.loadLabel(packageManager).toString(),
+                                        appInfo.flags and ApplicationInfo.FLAG_SYSTEM != 0
                                     )
                                 )
                             }

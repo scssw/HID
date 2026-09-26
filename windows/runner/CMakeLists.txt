@@ -20,6 +20,14 @@ add_executable(${BINARY_NAME} WIN32
 # that need different build settings.
 apply_standard_settings(${BINARY_NAME})
 
+# Keep the Windows executable resource version aligned with the app release.
+# This also avoids stale Flutter-generated CMake cache values in local builds.
+set(FLUTTER_VERSION "3.0.5+30005")
+set(FLUTTER_VERSION_MAJOR 3)
+set(FLUTTER_VERSION_MINOR 0)
+set(FLUTTER_VERSION_PATCH 5)
+set(FLUTTER_VERSION_BUILD 30005)
+
 # Add preprocessor definitions for the build version.
 target_compile_definitions(${BINARY_NAME} PRIVATE "FLUTTER_VERSION=\"${FLUTTER_VERSION}\"")
 target_compile_definitions(${BINARY_NAME} PRIVATE "FLUTTER_VERSION_MAJOR=${FLUTTER_VERSION_MAJOR}")

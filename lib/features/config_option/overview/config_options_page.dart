@@ -147,7 +147,9 @@ class ConfigOptionsPage extends HookConsumerWidget {
                     choices: Region.values,
                     title: t.settings.general.region,
                     presentChoice: (value) => value.present(t),
-                    onChanged: (val) => ref.watch(ConfigOptions.directDnsAddress.notifier).reset(),
+                    onChanged: (val) => ref
+                        .read(ConfigOptions.directDnsAddress.notifier)
+                        .update(ConfigOptions.defaultDirectDnsForRegion(val)),
                   ),
                   SwitchListTile(
                     title: Text(experimental(t.config.blockAds)),

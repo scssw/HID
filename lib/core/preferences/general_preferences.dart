@@ -50,7 +50,7 @@ abstract class Preferences {
 
   static final autoCheckIp = PreferencesNotifier.create<bool, bool>(
     "auto_check_ip",
-    true,
+    false,
   );
 
   static final startedByUser = PreferencesNotifier.create<bool, bool>(

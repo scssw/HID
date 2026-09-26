@@ -58,3 +58,35 @@ app.*.map.json
 
 
 /data
+
+# 忽略自己生成的临时文件、压缩包和签名证书
+.tmp*
+*.zip
+*.tar.gz
+*.aar
+*.dll
+*.dylib
+*.so
+*.exe
+*.pdb
+*.dill
+*.jks
+*.keystore
+
+# Build caches & local directories
+.gocache/
+.gomodcache/
+hiddify-core/
+windows/runner/libs/
+android/.gradle/
+android/app/libs/
+libcore/bin/
+libcore/.gocache/
+libcore/build/
+libcore/hiddify-core.tar.gz
+build/
+.dart_tool/
+构建.txt
+tmp_*
+libcore/tmp_*
+
