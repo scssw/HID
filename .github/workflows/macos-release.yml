@@ -46,28 +46,43 @@ jobs:
         run: |
           mkdir -p libcore/bin
           cd libcore
-          go mod download
+          echo "=== PWD & Files ==="
+          pwd
+          ls -la
+          echo "=== Go Env ==="
+          go env
+          echo "=== Downloading Go Modules ==="
+          go mod download -x
+          
+          echo "=== Compiling native arm64 libcore.dylib ==="
           export CGO_ENABLED=1
           TAGS="with_gvisor,with_quic,with_wireguard,with_utls,with_clash_api,with_grpc,with_dhcp,with_low_memory,with_conntrack"
 
-          echo "1. Compiling native arm64 libcore.dylib..."
-          GOOS=darwin GOARCH=arm64 go build -v -trimpath -tags "$TAGS" -buildmode=c-shared -o bin/libcore.dylib ./custom
+          if ! GOOS=darwin GOARCH=arm64 go build -v -trimpath -tags "$TAGS" -buildmode=c-shared -o bin/libcore.dylib ./custom 2>&1 | tee /tmp/arm64.log; then
+            echo "::error::arm64 go build failed"
+            echo "### arm64 Build Failure" >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            cat /tmp/arm64.log >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            exit 1
+          fi
 
-          echo "2. Attempting cross-compile for amd64 to produce Universal binary..."
+          echo "=== Compiling amd64 libcore.dylib ==="
           printf '#!/bin/sh\nexec clang -arch x86_64 "$@"\n' > /tmp/x86_64-clang
           chmod +x /tmp/x86_64-clang
 
-          if CC=/tmp/x86_64-clang GOOS=darwin GOARCH=amd64 go build -v -trimpath -tags "$TAGS" -buildmode=c-shared -o bin/libcore-amd64.dylib ./custom; then
-            echo "Merging arm64 and amd64 into Universal dylib..."
+          if CC=/tmp/x86_64-clang GOOS=darwin GOARCH=amd64 go build -v -trimpath -tags "$TAGS" -buildmode=c-shared -o bin/libcore-amd64.dylib ./custom 2>&1 | tee /tmp/amd64.log; then
+            echo "Merging into Universal binary..."
             lipo -create bin/libcore.dylib bin/libcore-amd64.dylib -output bin/libcore-universal.dylib
             mv bin/libcore-universal.dylib bin/libcore.dylib
             rm -f bin/libcore-amd64.dylib
           else
-            echo "amd64 build skipped, proceeding with native arm64 libcore.dylib"
+            echo "amd64 cross-compile failed, keeping native arm64"
+            cat /tmp/amd64.log
           fi
-          cd ..
 
-          echo "Verifying libcore.dylib:"
+          cd ..
+          echo "=== Done Libcore ==="
           ls -lh libcore/bin/libcore.dylib
           file libcore/bin/libcore.dylib
 
