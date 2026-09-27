@@ -1,0 +1,140 @@
+//go:build go1.20
+
+package dialer
+
+import (
+	"context"
+	"io"
+	"net"
+	"os"
+	"sync"
+	"time"
+
+	"github.com/metacubex/tfo-go"
+	"github.com/sagernet/sing/common"
+	"github.com/sagernet/sing/common/bufio"
+	E "github.com/sagernet/sing/common/exceptions"
+	M "github.com/sagernet/sing/common/metadata"
+)
+
+type slowOpenConn struct {
+	ctx         context.Context
+	conn        net.Conn
+	err         error
+	dialer      *tfo.Dialer
+	create      chan struct{}
+	destination M.Socksaddr
+	network     string
+	access      sync.Mutex
+}
+
+func (c *slowOpenConn) Read(b []byte) (n int, err error) {
+	if c.conn == nil {
+		select {
+		case <-c.create:
+			if c.err != nil {
+				return 0, c.err
+			}
+		case <-c.ctx.Done():
+			return 0, c.ctx.Err()
+		}
+	}
+	return c.conn.Read(b)
+}
+
+func (c *slowOpenConn) Write(b []byte) (n int, err error) {
+	if c.conn != nil {
+		return c.conn.Write(b)
+	}
+	c.access.Lock()
+	defer c.access.Unlock()
+	select {
+	case <-c.create:
+		if c.err != nil {
+			return 0, c.err
+		}
+		return c.conn.Write(b)
+	default:
+	}
+	c.conn, err = c.dialer.DialContext(c.ctx, c.network, c.destination.String(), b)
+	if err != nil {
+		c.conn = nil
+		c.err = E.Cause(err, "dial tcp fast open")
+	}
+	n = len(b)
+	close(c.create)
+	return
+}
+
+func (c *slowOpenConn) Close() error {
+	return common.Close(c.conn)
+}
+
+func (c *slowOpenConn) LocalAddr() net.Addr {
+	if c.conn == nil {
+		return M.Socksaddr{}
+	}
+	return c.conn.LocalAddr()
+}
+
+func (c *slowOpenConn) RemoteAddr() net.Addr {
+	if c.conn == nil {
+		return M.Socksaddr{}
+	}
+	return c.conn.RemoteAddr()
+}
+
+func (c *slowOpenConn) SetDeadline(t time.Time) error {
+	if c.conn == nil {
+		return os.ErrInvalid
+	}
+	return c.conn.SetDeadline(t)
+}
+
+func (c *slowOpenConn) SetReadDeadline(t time.Time) error {
+	if c.conn == nil {
+		return os.ErrInvalid
+	}
+	return c.conn.SetReadDeadline(t)
+}
+
+func (c *slowOpenConn) SetWriteDeadline(t time.Time) error {
+	if c.conn == nil {
+		return os.ErrInvalid
+	}
+	return c.conn.SetWriteDeadline(t)
+}
+
+func (c *slowOpenConn) Upstream() any {
+	return c.conn
+}
+
+func (c *slowOpenConn) ReaderReplaceable() bool {
+	return c.conn != nil
+}
+
+func (c *slowOpenConn) WriterReplaceable() bool {
+	return c.conn != nil
+}
+
+func (c *slowOpenConn) LazyHeadroom() bool {
+	return c.conn == nil
+}
+
+func (c *slowOpenConn) NeedHandshake() bool {
+	return c.conn == nil
+}
+
+func (c *slowOpenConn) WriteTo(w io.Writer) (n int64, err error) {
+	if c.conn == nil {
+		select {
+		case <-c.create:
+			if c.err != nil {
+				return 0, c.err
+			}
+		case <-c.ctx.Done():
+			return 0, c.ctx.Err()
+		}
+	}
+	return bufio.Copy(w, c.conn)
+}
