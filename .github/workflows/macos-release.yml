@@ -54,10 +54,7 @@ jobs:
           GOOS=darwin GOARCH=arm64 go build -v -trimpath -tags "$TAGS" -buildmode=c-shared -o bin/libcore.dylib ./custom
 
           echo "2. Attempting cross-compile for amd64 to produce Universal binary..."
-          cat << 'EOF' > /tmp/x86_64-clang
-#!/bin/sh
-exec clang -arch x86_64 "$@"
-EOF
+          printf '#!/bin/sh\nexec clang -arch x86_64 "$@"\n' > /tmp/x86_64-clang
           chmod +x /tmp/x86_64-clang
 
           if CC=/tmp/x86_64-clang GOOS=darwin GOARCH=amd64 go build -v -trimpath -tags "$TAGS" -buildmode=c-shared -o bin/libcore-amd64.dylib ./custom; then
