@@ -45,18 +45,17 @@ jobs:
       - name: Prepare Libcore binaries
         run: |
           mkdir -p libcore/bin
-          echo "Attempting to compile libcore for macOS..."
-          if make build-macos-libs; then
-            echo "Successfully compiled libcore from source."
+          echo "Compiling customized libcore for macOS (Universal: x86_64 + arm64)..."
+          make build-macos-libs
+          if [ -f "libcore/bin/libcore.dylib" ]; then
+            echo "Successfully compiled libcore.dylib:"
+            file libcore/bin/libcore.dylib
           else
-            echo "Compiling libcore failed or skipped, downloading official prebuilt core..."
-            make macos-libs
-          fi
-          if [ ! -f "libcore/bin/libcore.dylib" ]; then
-            echo "libcore.dylib missing, forcing download..."
-            make macos-libs
+            echo "::error::libcore.dylib compilation failed!"
+            exit 1
           fi
           ls -la libcore/bin/
+
 
       - name: Prepare Flutter code generation & translations
         run: |

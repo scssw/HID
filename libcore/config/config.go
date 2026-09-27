@@ -466,10 +466,11 @@ func setDns(options *option.Options, opt *HiddifyOptions) {
 			},
 		},
 	}
-	sky_rethinkdns := getIPs([]string{"www.speedtest.net", "sky.rethinkdns.com"})
-	if len(sky_rethinkdns) > 0 {
-		options.DNS.StaticIPs["sky.rethinkdns.com"] = sky_rethinkdns
-	}
+	// Avoid synchronous network lookup during config generation/validation
+	// sky_rethinkdns := getIPs([]string{"www.speedtest.net", "sky.rethinkdns.com"})
+	// if len(sky_rethinkdns) > 0 {
+	// 	options.DNS.StaticIPs["sky.rethinkdns.com"] = sky_rethinkdns
+	// }
 }
 
 func setFakeDns(options *option.Options, opt *HiddifyOptions) {
@@ -554,16 +555,13 @@ func shouldUseEmbeddedRegionRuleSets(region string, isAndroid bool) bool {
 	if !strings.EqualFold(region, "cn") {
 		return false
 	}
-	// Desktop Windows is sensitive to first-start remote rule-set fetch timing.
-	// Use the embedded CN rules there just like Android does.
-	return isAndroid || runtime.GOOS == "windows"
+	// Always use embedded CN rules on all platforms (Android, Windows, macOS, Linux)
+	// to avoid stalling when remote raw.githubusercontent.com is blocked.
+	return true
 }
 
 func writeEmbeddedRuleSet(name string) string {
-	target := name
-	if absPath, err := filepath.Abs(name); err == nil {
-		target = absPath
-	}
+	target := filepath.Join(os.TempDir(), name)
 	data, err := embeddedRuleSets.ReadFile(name)
 	if err == nil {
 		_ = os.WriteFile(target, data, 0o644)

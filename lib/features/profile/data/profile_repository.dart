@@ -179,9 +179,17 @@ class ProfileRepositoryImpl with ExceptionHandler, InfraLogger implements Profil
   ) {
     return exceptionHandler(
       () async {
-        singbox.changeOptions(await configOptionRepository.getConfigOptions()).run();
+        final options = await configOptionRepository.getConfigOptions();
+        await singbox.changeOptions(options).run();
 
-        return singbox.validateConfigByPath(path, tempPath, debug).mapLeft(ProfileFailure.invalidConfig).run();
+        return await singbox
+            .validateConfigByPath(path, tempPath, debug)
+            .mapLeft(ProfileFailure.invalidConfig)
+            .run()
+            .timeout(
+              const Duration(seconds: 15),
+              onTimeout: () => left(const ProfileFailure.invalidConfig('Config validation timed out')),
+            );
       },
       ProfileUnexpectedFailure.new,
     );
