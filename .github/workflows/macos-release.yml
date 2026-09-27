@@ -45,10 +45,38 @@ jobs:
       - name: Prepare Libcore binaries
         run: |
           mkdir -p libcore/bin
-          echo "Compiling customized libcore for macOS (Universal: x86_64 + arm64)..."
-          make build-macos-libs
+          cd libcore
+          go mod download
+          export CGO_ENABLED=1
+          export CGO_CFLAGS_ALLOW=".*"
+          export CGO_LDFLAGS_ALLOW=".*"
+          TAGS="with_gvisor,with_quic,with_wireguard,with_utls,with_clash_api,with_grpc,with_dhcp,with_low_memory,with_conntrack"
+
+          echo "Compiling arm64 libcore..."
+          CC="clang" CGO_CFLAGS="-arch arm64 -mmacosx-version-min=11.0" CGO_LDFLAGS="-arch arm64 -mmacosx-version-min=11.0" \
+            GOOS=darwin GOARCH=arm64 \
+            go build -trimpath -tags "$TAGS" \
+            -buildmode=c-shared -o bin/libcore-arm64.dylib ./custom
+
+          echo "Compiling amd64 libcore..."
+          CC="clang" CGO_CFLAGS="-arch x86_64 -mmacosx-version-min=10.15" CGO_LDFLAGS="-arch x86_64 -mmacosx-version-min=10.15" \
+            GOOS=darwin GOARCH=amd64 \
+            go build -trimpath -tags "$TAGS" \
+            -buildmode=c-shared -o bin/libcore-amd64.dylib ./custom
+
+          echo "Combining architectures with lipo..."
+          if [ -f "bin/libcore-arm64.dylib" ] && [ -f "bin/libcore-amd64.dylib" ]; then
+            lipo -create bin/libcore-arm64.dylib bin/libcore-amd64.dylib -output bin/libcore.dylib
+            rm -f bin/libcore-arm64.dylib bin/libcore-amd64.dylib
+          elif [ -f "bin/libcore-arm64.dylib" ]; then
+            mv bin/libcore-arm64.dylib bin/libcore.dylib
+          elif [ -f "bin/libcore-amd64.dylib" ]; then
+            mv bin/libcore-amd64.dylib bin/libcore.dylib
+          fi
+          cd ..
+
           if [ -f "libcore/bin/libcore.dylib" ]; then
-            echo "Successfully compiled libcore.dylib:"
+            echo "Successfully generated libcore.dylib:"
             file libcore/bin/libcore.dylib
           else
             echo "::error::libcore.dylib compilation failed!"
