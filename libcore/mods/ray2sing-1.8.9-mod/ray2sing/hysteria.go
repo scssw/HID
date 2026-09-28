@@ -41,9 +41,21 @@ func HysteriaSingbox(hysteriaURL string) (*T.Outbound, error) {
 	}
 
 	singOut.HysteriaOptions.Obfs = u.Params["obfsParam"]
+	mport := u.Params["mport"]
+	if mport == "" {
+		mport = u.Params["ports"]
+	}
+	if mport == "" {
+		mport = u.Params["mports"]
+	}
+	if mport != "" {
+		singOut.HysteriaOptions.Mport = mport
+		singOut.HysteriaOptions.ServerPorts = []string{mport}
+	}
 	singOut.HysteriaOptions.TurnRelay, err = u.GetRelayOptions()
 	if err != nil {
 		return nil, err
 	}
+
 	return singOut, nil
 }

@@ -208,7 +208,7 @@ class ProfileRepositoryImpl with ExceptionHandler, InfraLogger implements Profil
         try {
           await tempFile.writeAsString(content);
           final result = await validateConfig(file.path, tempFile.path, false).run();
-          if (result.isRight()) await _selectOnlyProxyAsDefault(file);
+          if (result.isRight()) await _selectOnlyProxyAsDefault(file, content);
           return result;
         } finally {
           if (tempFile.existsSync()) tempFile.deleteSync();
@@ -415,11 +415,17 @@ class ProfileRepositoryImpl with ExceptionHandler, InfraLogger implements Profil
             cancelToken: cancelToken,
             userAgent: configs.useXrayCoreWhenPossible ? "v2rayNG/1.8.23" : null,
           );
+          String? rawContent;
+          if (tempFile.existsSync()) {
+            try {
+              rawContent = await tempFile.readAsString();
+            } catch (_) {}
+          }
           final headers = await _populateHeaders(response.headers.map, tempFile.path);
           return await validateConfig(file.path, tempFile.path, false)
               .andThen(
                 () => TaskEither(() async {
-                  await _selectOnlyProxyAsDefault(file);
+                  await _selectOnlyProxyAsDefault(file, rawContent);
                   final profile = ProfileParser.parse(url, headers);
                   return right(profile);
                 }),
@@ -433,12 +439,16 @@ class ProfileRepositoryImpl with ExceptionHandler, InfraLogger implements Profil
   }
 
 
-  Future<void> _selectOnlyProxyAsDefault(File file) async {
-    if (!Platform.isWindows) return;
-
+  Future<void> _selectOnlyProxyAsDefault(File file, [String? rawContent]) async {
     try {
       final config = await file.readAsString();
-      final updatedConfig = selectOnlyProxyAsDefault(config);
+      var updatedConfig = config;
+      if (rawContent != null && rawContent.isNotEmpty) {
+        updatedConfig = patchMportIntoConfig(updatedConfig, rawContent);
+      }
+      if (Platform.isWindows) {
+        updatedConfig = selectOnlyProxyAsDefault(updatedConfig);
+      }
       if (updatedConfig != config) await file.writeAsString(updatedConfig);
       // A single-node config must apply its node default on the next start;
       // drop any stale cached group selection that would override it.

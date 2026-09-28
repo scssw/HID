@@ -7,6 +7,7 @@ import 'package:hiddify/features/connection/model/connection_failure.dart';
 import 'package:hiddify/features/connection/model/connection_status.dart';
 
 import 'package:hiddify/features/profile/data/profile_path_resolver.dart';
+import 'package:hiddify/features/profile/data/single_node_proxy_default.dart';
 import 'package:hiddify/singbox/model/singbox_config_option.dart';
 import 'package:hiddify/singbox/model/singbox_status.dart';
 import 'package:hiddify/singbox/service/singbox_service.dart';
@@ -168,6 +169,23 @@ class ConnectionRepositoryImpl with ExceptionHandler, InfraLogger implements Con
         );
         await $(setup());
         await $(applyConfigOption(options, testUrl));
+        await $(
+          TaskEither(() async {
+            try {
+              final file = profilePathResolver.file(fileName);
+              if (await file.exists()) {
+                final content = await file.readAsString();
+                final randomized = randomizePortHopping(content);
+                if (randomized != content) {
+                  await file.writeAsString(randomized);
+                }
+              }
+            } catch (e, st) {
+              loggy.warning("failed to randomize port hopping before start", e, st);
+            }
+            return right(unit);
+          }),
+        );
         return await $(
           singbox
               .start(

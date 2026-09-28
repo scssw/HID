@@ -30,7 +30,9 @@ type hy2Hint struct {
 	upMbps       *int
 	downMbps     *int
 	obfsPassword string
+	mport        string
 }
+
 
 func ParseConfig(path string, debug bool) ([]byte, error) {
 	content, err := os.ReadFile(path)
@@ -91,9 +93,9 @@ func ParseConfigContent(contentstr string, debug bool, configOpt *HiddifyOptions
 
 	v2rayStr, err := ray2sing.Ray2Singbox(string(content), configOpt.UseXrayCoreWhenPossible)
 	if err == nil {
-		upMbps, downMbps := extractHysteria2SpeedFromRawInput(string(content))
-		if upMbps != nil || downMbps != nil {
-			if patched, patchErr := patchHysteria2SpeedInSingboxJSON([]byte(v2rayStr), upMbps, downMbps); patchErr == nil {
+		hints := extractHysteria2HintsFromRawInput(string(content))
+		if len(hints) > 0 {
+			if patched, patchErr := patchHysteria2HintsInSingboxJSON([]byte(v2rayStr), hints); patchErr == nil {
 				v2rayStr = string(patched)
 			}
 		}
@@ -125,8 +127,13 @@ func ParseConfigContent(contentstr string, debug bool, configOpt *HiddifyOptions
 	return nil, fmt.Errorf("unable to determine config format")
 }
 
-func extractHysteria2SpeedFromRawInput(raw string) (*int, *int) {
-	lines := strings.FieldsFunc(raw, func(r rune) bool {
+func extractHysteria2HintsFromRawInput(raw string) map[string]hy2Hint {
+	target := raw
+	if decoded, ok := decodeBase64Flexible(raw); ok {
+		target = decoded
+	}
+	result := make(map[string]hy2Hint)
+	lines := strings.FieldsFunc(target, func(r rune) bool {
 		return r == '\r' || r == '\n'
 	})
 	for _, line := range lines {
@@ -134,7 +141,8 @@ func extractHysteria2SpeedFromRawInput(raw string) (*int, *int) {
 		if line == "" {
 			continue
 		}
-		if !strings.HasPrefix(strings.ToLower(line), "hysteria2://") {
+		lower := strings.ToLower(line)
+		if !strings.HasPrefix(lower, "hysteria2://") && !strings.HasPrefix(lower, "hy2://") {
 			continue
 		}
 		u, err := url.Parse(line)
@@ -148,39 +156,23 @@ func extractHysteria2SpeedFromRawInput(raw string) (*int, *int) {
 			defaultUp := 20
 			up = &defaultUp
 		}
-		if up != nil || down != nil {
-			return up, down
-		}
-	}
-	return nil, nil
-}
+		mport := strings.TrimSpace(firstNonEmpty(q.Get("mport"), q.Get("ports"), q.Get("mports")))
+		obfs := strings.TrimSpace(firstNonEmpty(q.Get("obfs-password"), q.Get("obfs_password"), q.Get("obfs")))
 
-func patchHysteria2SpeedInSingboxJSON(content []byte, upMbps, downMbps *int) ([]byte, error) {
-	if upMbps == nil && downMbps == nil {
-		return content, nil
-	}
-	var options option.Options
-	if err := json.Unmarshal(content, &options); err != nil {
-		return content, err
-	}
-	changed := false
-	for i := range options.Outbounds {
-		if options.Outbounds[i].Type != "hysteria2" {
-			continue
+		hint := hy2Hint{
+			upMbps:       up,
+			downMbps:     down,
+			obfsPassword: obfs,
+			mport:        mport,
 		}
-		if upMbps != nil && options.Outbounds[i].Hysteria2Options.UpMbps == 0 {
-			options.Outbounds[i].Hysteria2Options.UpMbps = *upMbps
-			changed = true
+
+		tag := u.Fragment
+		if tag != "" {
+			result[tag] = hint
 		}
-		if downMbps != nil && options.Outbounds[i].Hysteria2Options.DownMbps == 0 {
-			options.Outbounds[i].Hysteria2Options.DownMbps = *downMbps
-			changed = true
-		}
+		result["__fallback__"] = hint
 	}
-	if !changed {
-		return content, nil
-	}
-	return json.MarshalIndent(options, "", "  ")
+	return result
 }
 
 func patchHysteria2HintsInSingboxJSON(content []byte, hints map[string]hy2Hint) ([]byte, error) {
@@ -189,12 +181,27 @@ func patchHysteria2HintsInSingboxJSON(content []byte, hints map[string]hy2Hint) 
 		return content, err
 	}
 	changed := false
+	fallbackHint, hasFallback := hints["__fallback__"]
+
 	for i := range options.Outbounds {
 		out := &options.Outbounds[i]
 		if out.Type != "hysteria2" {
 			continue
 		}
 		hint, ok := hints[out.Tag]
+		if !ok {
+			for k, h := range hints {
+				if k != "__fallback__" && strings.HasPrefix(out.Tag, k) {
+					hint = h
+					ok = true
+					break
+				}
+			}
+		}
+		if !ok && hasFallback {
+			hint = fallbackHint
+			ok = true
+		}
 		if !ok {
 			continue
 		}
@@ -204,6 +211,11 @@ func patchHysteria2HintsInSingboxJSON(content []byte, hints map[string]hy2Hint) 
 		}
 		if hint.downMbps != nil && out.Hysteria2Options.DownMbps == 0 {
 			out.Hysteria2Options.DownMbps = *hint.downMbps
+			changed = true
+		}
+		if hint.mport != "" && out.Hysteria2Options.Mport == "" {
+			out.Hysteria2Options.Mport = hint.mport
+			out.Hysteria2Options.ServerPorts = []string{hint.mport}
 			changed = true
 		}
 		if hint.obfsPassword != "" {
@@ -262,6 +274,7 @@ func extractClashHy2Hints(content []byte) map[string]hy2Hint {
 			upMbps:       parseMbpsIntString(firstNonEmpty(toString(pm["up_mbps"]), toString(pm["upmbps"]), toString(pm["up"]))),
 			downMbps:     parseMbpsIntString(firstNonEmpty(toString(pm["down_mbps"]), toString(pm["downmbps"]), toString(pm["down"]))),
 			obfsPassword: strings.TrimSpace(toString(pm["obfs"])),
+			mport:        strings.TrimSpace(firstNonEmpty(toString(pm["mport"]), toString(pm["ports"]), toString(pm["mports"]))),
 		}
 		if hint.obfsPassword == "" {
 			hint.obfsPassword = strings.TrimSpace(toString(pm["obfs-password"]))

@@ -6,11 +6,13 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/hiddify/hiddify-core/bridge"
 	"github.com/hiddify/hiddify-core/config"
 	pb "github.com/hiddify/hiddify-core/hiddifyrpc"
+	C "github.com/sagernet/sing-box/constant"
 	"github.com/sagernet/sing-box/experimental/libbox"
 	"github.com/sagernet/sing-box/log"
 )
@@ -108,6 +110,31 @@ func StartService(in *pb.StartRequest) (*pb.CoreInfoResponse, error) {
 			return resp, err
 		}
 		parsedContent = *parsedContent_tmp
+	} else {
+		for i := range parsedContent.Outbounds {
+			out := &parsedContent.Outbounds[i]
+			if out.Type == C.TypeHysteria2 {
+				mport := out.Hysteria2Options.Mport
+				if mport == "" && len(out.Hysteria2Options.ServerPorts) > 0 {
+					mport = strings.Join(out.Hysteria2Options.ServerPorts, ",")
+				}
+				if mport != "" {
+					if port := config.PickRandomPortFromMport(mport); port > 0 {
+						out.Hysteria2Options.ServerPort = port
+					}
+				}
+			} else if out.Type == C.TypeHysteria {
+				mport := out.HysteriaOptions.Mport
+				if mport == "" && len(out.HysteriaOptions.ServerPorts) > 0 {
+					mport = strings.Join(out.HysteriaOptions.ServerPorts, ",")
+				}
+				if mport != "" {
+					if port := config.PickRandomPortFromMport(mport); port > 0 {
+						out.HysteriaOptions.ServerPort = port
+					}
+				}
+			}
+		}
 	}
 	Log(pb.LogLevel_DEBUG, pb.LogType_CORE, "Saving config")
 	currentBuildConfigPath := filepath.Join(sWorkingPath, "current-config.json")

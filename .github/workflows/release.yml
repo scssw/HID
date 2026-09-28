@@ -1,0 +1,289 @@
+name: Build & Release (macOS, Windows, Android)
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: 'Release Tag Name (e.g. v3.0.8)'
+        required: false
+        default: 'v3.0.8'
+
+permissions:
+  contents: write
+
+jobs:
+  build-macos:
+    name: Build macOS (Universal)
+    runs-on: macos-14
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+          cache-dependency-path: libcore/go.sum
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2.16.0
+        with:
+          flutter-version: '3.24.0'
+          channel: 'stable'
+          cache: true
+
+      - name: Install macOS build dependencies
+        run: |
+          brew install create-dmg tree
+          npm install -g appdmg
+          dart pub global activate flutter_distributor
+          echo "$HOME/.pub-cache/bin" >> $GITHUB_PATH
+
+      - name: Prepare Libcore binaries
+        run: |
+          mkdir -p libcore/bin
+          cd libcore
+          echo "=== Compiling native arm64 libcore.dylib ==="
+          export CGO_ENABLED=1
+          TAGS="with_gvisor,with_quic,with_wireguard,with_utls,with_clash_api,with_grpc,with_dhcp,with_low_memory,with_conntrack"
+
+          if ! GOOS=darwin GOARCH=arm64 go build -v -trimpath -tags "$TAGS" -buildmode=c-shared -o bin/libcore.dylib ./custom 2>&1 | tee /tmp/arm64.log; then
+            ERR_MSG=$(tail -n 25 /tmp/arm64.log | tr '\r\n' '  ')
+            echo "::error title=ARM64_BUILD_ERROR::$ERR_MSG"
+            exit 1
+          fi
+
+          echo "=== Compiling amd64 libcore.dylib ==="
+          printf '#!/bin/sh\nexec clang -arch x86_64 "$@"\n' > /tmp/x86_64-clang
+          chmod +x /tmp/x86_64-clang
+
+          if CC=/tmp/x86_64-clang GOOS=darwin GOARCH=amd64 go build -v -trimpath -tags "$TAGS" -buildmode=c-shared -o bin/libcore-amd64.dylib ./custom 2>&1 | tee /tmp/amd64.log; then
+            echo "Merging into Universal binary..."
+            lipo -create bin/libcore.dylib bin/libcore-amd64.dylib -output bin/libcore-universal.dylib
+            mv bin/libcore-universal.dylib bin/libcore.dylib
+            rm -f bin/libcore-amd64.dylib
+          else
+            echo "amd64 cross-compile failed, keeping native arm64"
+          fi
+
+          cd ..
+          ls -lh libcore/bin/libcore.dylib
+
+      - name: Prepare Flutter code generation & translations
+        run: |
+          flutter pub get
+          dart run build_runner build --delete-conflicting-outputs
+          dart run slang
+
+      - name: Build macOS DMG and PKG
+        run: |
+          export PATH="$PATH:$HOME/.pub-cache/bin"
+          flutter_distributor package --platform macos --targets dmg,pkg --skip-clean --build-target lib/main.dart
+
+      - name: Collect macOS packages
+        run: |
+          mkdir -p out
+          find dist -type f \( -name "*.dmg" -o -name "*.pkg" \) -exec cp {} out/ \;
+          ls -la out/
+
+      - name: Upload macOS Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-release
+          path: out/*
+          retention-days: 7
+
+  build-windows:
+    name: Build Windows (x64)
+    runs-on: windows-2022
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+          cache-dependency-path: libcore/go.sum
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2.16.0
+        with:
+          flutter-version: '3.24.0'
+          channel: 'stable'
+          cache: true
+
+      - name: Setup Windows build dependencies
+        shell: pwsh
+        run: |
+          dart pub global activate flutter_distributor
+          echo "$HOME\.pub-cache\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          echo "C:\msys64\mingw64\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          echo "C:\Program Files (x86)\Inno Setup 6" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
+      - name: Prepare Windows Libcore
+        shell: bash
+        run: |
+          mkdir -p libcore/bin
+          cd libcore
+          echo "=== Fetching baseline Windows core assets ==="
+          curl -L -o core-win.tar.gz https://github.com/hiddify/hiddify-next-core/releases/download/v3.1.8/hiddify-core-windows-amd64.tar.gz || true
+          if [ -f core-win.tar.gz ]; then
+            tar -xzf core-win.tar.gz -C bin/ || true
+            rm -f core-win.tar.gz
+          fi
+
+          echo "=== Compiling custom libcore.dll with Hysteria 2 port hopping ==="
+          TAGS="with_gvisor,with_quic,with_wireguard,with_utls,with_clash_api,with_grpc"
+          CGO_ENABLED=1 go build -v -trimpath -tags "$TAGS" -ldflags="-w -s" -buildmode=c-shared -o bin/libcore.dll ./custom
+
+          echo "=== Checking libcore.dll ==="
+          ls -lh bin/libcore.dll
+          cd ..
+
+      - name: Prepare Flutter code generation & translations
+        shell: pwsh
+        run: |
+          flutter pub get
+          dart run build_runner build --delete-conflicting-outputs
+          dart run slang
+
+      - name: Build Windows Setup & Portable
+        shell: pwsh
+        run: |
+          flutter_distributor package --platform windows --targets exe --skip-clean --build-target lib/main.dart
+          flutter build windows --release
+          powershell -File .\scripts\package_windows.ps1
+
+      - name: Collect Windows packages
+        shell: pwsh
+        run: |
+          Get-ChildItem -Path out -Recurse
+
+      - name: Upload Windows Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-release
+          path: out/*
+          retention-days: 7
+
+  build-android:
+    name: Build Android (arm64-v8a)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: 17
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2.16.0
+        with:
+          flutter-version: '3.24.0'
+          channel: 'stable'
+          cache: true
+
+      - name: Setup Android Keystore (if secret exists)
+        run: |
+          if [ -n "${{ secrets.ANDROID_SIGNING_KEY }}" ]; then
+            echo "${{ secrets.ANDROID_SIGNING_KEY }}" | base64 --decode > android/key.jks
+            echo "storeFile=$(pwd)/android/key.jks" > android/key.properties
+            echo "storePassword=${{ secrets.ANDROID_SIGNING_STORE_PASSWORD }}" >> android/key.properties
+            echo "keyPassword=${{ secrets.ANDROID_SIGNING_KEY_PASSWORD }}" >> android/key.properties
+            echo "keyAlias=${{ secrets.ANDROID_SIGNING_KEY_ALIAS }}" >> android/key.properties
+          fi
+
+      - name: Prepare Android Libcore AAR
+        run: |
+          mkdir -p libcore/bin
+          curl -L -o core-android.tar.gz https://github.com/hiddify/hiddify-next-core/releases/download/v3.1.8/hiddify-core-android.tar.gz
+          tar -xzf core-android.tar.gz -C libcore/bin/
+          rm -f core-android.tar.gz
+          ls -lh libcore/bin/libcore.aar
+
+      - name: Prepare Flutter code generation & translations
+        run: |
+          flutter pub get
+          dart run build_runner build --delete-conflicting-outputs
+          dart run slang
+
+      - name: Build Android arm64-v8a APK
+        run: |
+          flutter build apk --release --target-platform android-arm64
+
+      - name: Collect Android APK
+        run: |
+          mkdir -p out
+          ls -R build/app/outputs/flutter-apk/
+          find build/app/outputs/flutter-apk -type f -name "*arm64-v8a*.apk" -exec cp {} out/Hiddify-Android-arm64-v8a.apk \;
+          if [ ! -f out/Hiddify-Android-arm64-v8a.apk ]; then
+            find build/app/outputs/flutter-apk -type f -name "*.apk" -exec cp {} out/Hiddify-Android-arm64-v8a.apk \;
+          fi
+          ls -lh out/
+
+      - name: Upload Android Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-release
+          path: out/*
+          retention-days: 7
+
+  publish-release:
+    name: Publish GitHub Release
+    needs: [build-macos, build-windows, build-android]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: out
+          merge-multiple: true
+
+      - name: List downloaded artifacts
+        run: |
+          ls -lh out/
+
+      - name: Determine Release Tag
+        id: tag
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            TAG="${{ inputs.tag_name }}"
+            [ -z "$TAG" ] && TAG="v3.0.8"
+          elif [[ "${{ github.ref }}" == refs/tags/* ]]; then
+            TAG="${GITHUB_REF#refs/tags/}"
+          else
+            TAG="v3.0.8"
+          fi
+          echo "release_tag=$TAG" >> $GITHUB_OUTPUT
+
+      - name: Create or Update GitHub Release
+        uses: softprops/action-gh-release@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ steps.tag.outputs.release_tag }}
+          name: Hiddify ${{ steps.tag.outputs.release_tag }}
+          draft: false
+          prerelease: false
+          files: out/*
+          body: |
+            ## Hiddify ${{ steps.tag.outputs.release_tag }}
+
+            ### Included Builds:
+            - **macOS**: DMG & PKG (Universal: Apple Silicon & Intel)
+            - **Windows**: Setup Installer (.exe) & Portable (.zip) (x64)
+            - **Android**: APK (arm64-v8a)
+
+            ### What's New:
+            - Fully supports Hysteria 2 Port Hopping (`mport`), with automatic per-connection port randomization.

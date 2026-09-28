@@ -61,5 +61,18 @@ func Hysteria2Singbox(hysteria2Url string) (*T.Outbound, error) {
 		},
 	}
 
+	mport := decoded["mport"]
+	if mport == "" {
+		mport = decoded["ports"]
+	}
+	if mport == "" {
+		mport = decoded["mports"]
+	}
+	if mport != "" {
+		result.Hysteria2Options.Mport = mport
+		result.Hysteria2Options.ServerPorts = []string{mport}
+	}
+
 	return &result, nil
 }
+

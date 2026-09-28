@@ -3,7 +3,10 @@ package config
 import (
 	"encoding/json"
 	"fmt"
+	"math/rand"
 	"net"
+	"strconv"
+	"strings"
 
 	C "github.com/sagernet/sing-box/constant"
 	"github.com/sagernet/sing-box/option"
@@ -160,6 +163,8 @@ func patchOutbound(base option.Outbound, configOpt HiddifyOptions, staticIpsDns 
 	switch base.Type {
 	case C.TypeVMess, C.TypeVLESS, C.TypeTrojan, C.TypeShadowsocks:
 		obj = patchOutboundMux(base, configOpt, obj)
+	case C.TypeHysteria2, C.TypeHysteria:
+		obj = patchHysteriaPortHopping(base, obj)
 	}
 
 	modifiedJson, err := json.Marshal(obj)
@@ -174,6 +179,99 @@ func patchOutbound(base option.Outbound, configOpt HiddifyOptions, staticIpsDns 
 
 	return &outbound, serverDomain, nil
 }
+
+// ParsePortRanges parses strings like "20000-50000", "20000:50000, 4433" or ["20000-50000"]
+func ParsePortRanges(mport string) [][2]uint16 {
+	var ranges [][2]uint16
+	for _, part := range strings.Split(mport, ",") {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+		sep := ""
+		if strings.Contains(part, "-") {
+			sep = "-"
+		} else if strings.Contains(part, ":") {
+			sep = ":"
+		}
+		if sep != "" {
+			sub := strings.SplitN(part, sep, 2)
+			start, err1 := strconv.ParseUint(strings.TrimSpace(sub[0]), 10, 16)
+			end, err2 := strconv.ParseUint(strings.TrimSpace(sub[1]), 10, 16)
+			if err1 == nil && err2 == nil && start > 0 && end > 0 {
+				if start > end {
+					start, end = end, start
+				}
+				ranges = append(ranges, [2]uint16{uint16(start), uint16(end)})
+			}
+		} else {
+			p, err := strconv.ParseUint(part, 10, 16)
+			if err == nil && p > 0 {
+				ranges = append(ranges, [2]uint16{uint16(p), uint16(p)})
+			}
+		}
+	}
+	return ranges
+}
+
+func PickRandomPortFromMport(mport string) uint16 {
+	ranges := ParsePortRanges(mport)
+	if len(ranges) == 0 {
+		return 0
+	}
+	var total int
+	for _, r := range ranges {
+		total += int(r[1] - r[0] + 1)
+	}
+	if total <= 0 {
+		return 0
+	}
+	idx := rand.Intn(total)
+	for _, r := range ranges {
+		count := int(r[1] - r[0] + 1)
+		if idx < count {
+			return r[0] + uint16(idx)
+		}
+		idx -= count
+	}
+	return ranges[0][0]
+}
+
+func patchHysteriaPortHopping(base option.Outbound, obj outboundMap) outboundMap {
+	mportStr := ""
+	if base.Type == C.TypeHysteria2 {
+		mportStr = base.Hysteria2Options.Mport
+		if mportStr == "" && len(base.Hysteria2Options.ServerPorts) > 0 {
+			mportStr = strings.Join(base.Hysteria2Options.ServerPorts, ",")
+		}
+	} else if base.Type == C.TypeHysteria {
+		mportStr = base.HysteriaOptions.Mport
+		if mportStr == "" && len(base.HysteriaOptions.ServerPorts) > 0 {
+			mportStr = strings.Join(base.HysteriaOptions.ServerPorts, ",")
+		}
+	}
+	if mportStr == "" {
+		if v, ok := obj["mport"].(string); ok {
+			mportStr = v
+		} else if sp, ok := obj["server_ports"].([]interface{}); ok && len(sp) > 0 {
+			var spList []string
+			for _, item := range sp {
+				if s, ok := item.(string); ok {
+					spList = append(spList, s)
+				}
+			}
+			mportStr = strings.Join(spList, ",")
+		}
+	}
+	if mportStr != "" {
+		if pickedPort := PickRandomPortFromMport(mportStr); pickedPort > 0 {
+			fmt.Printf("[Port Hopping] Outbound [%s] selected random port %d from range %s\n", base.Tag, pickedPort, mportStr)
+			obj["server_port"] = pickedPort
+		}
+	}
+	return obj
+}
+
 
 // func (o outboundMap) transportType() string {
 // 	if transport, ok := o["transport"].(map[string]interface{}); ok {
