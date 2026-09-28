@@ -180,7 +180,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Setup Java 17
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: 'zulu'
           java-version: 17
@@ -213,6 +213,8 @@ jobs:
       - name: Prepare Flutter code generation & translations
         run: |
           flutter pub get
+          # Patch plugins that lack namespace in AGP 8
+          find $HOME/.pub-cache -name "build.gradle" -path "*flutter_easy_permission*" -exec sed -i '/apply plugin: .com.android.library./a android { namespace "xyz.bczl.flutter.flutter_easy_permission" }' {} + || true
           dart run build_runner build --delete-conflicting-outputs
           dart run slang
 
@@ -239,6 +241,7 @@ jobs:
 
   publish-release:
     name: Publish GitHub Release
+    if: always() && !cancelled()
     needs: [build-macos, build-windows, build-android]
     runs-on: ubuntu-latest
     permissions:
