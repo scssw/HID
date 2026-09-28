@@ -103,6 +103,13 @@ android {
         aidl true
     }
 
+    packagingOptions {
+        jniLibs {
+            useLegacyPackaging = true
+            pickFirsts += ['**/libbox.so', '**/libc++_shared.so']
+        }
+    }
+
 }
 
 android.applicationVariants.all { variant ->
@@ -116,7 +123,7 @@ flutter {
 }
 
 dependencies {
-    implementation fileTree(dir: 'libs', include: ['*.jar', '*.aar'])
+    implementation fileTree(dir: 'libs', include: ['*.jar'])
     implementation files('../../libcore/bin/libcore.aar')
     implementation 'com.google.code.gson:gson:2.10.1'
     implementation 'androidx.core:core-ktx:1.12.0'
