@@ -1,28 +1,28 @@
-New-Item -ItemType Directory -Force -Name "dist\tmp"
 New-Item -ItemType Directory -Force -Name "out"
 
-# Copy any setup exe from dist to out
-$setupExes = Get-ChildItem -Recurse -File -Path "dist" -Filter "*.exe"
-if ($setupExes) {
-    Copy-Item $setupExes[0].FullName -Destination "out\Hiddify-Windows-Setup-x64.exe" -Force
-    foreach ($exe in $setupExes) {
-        Copy-Item $exe.FullName -Destination "out\" -Force
-    }
-} else {
-    Write-Host "Warning: No setup exe found in dist, copying runner Release Hiddify.exe as fallback"
-    if (Test-Path "build\windows\x64\runner\Release\Hiddify.exe") {
-        Copy-Item "build\windows\x64\runner\Release\Hiddify.exe" -Destination "out\Hiddify-Windows-Setup-x64.exe" -Force
-    }
+# Locate Inno Setup compiler
+$isccPath = "iscc"
+if (Test-Path "C:\Program Files (x86)\Inno Setup 6\ISCC.exe") {
+    $isccPath = "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
+} elseif (Test-Path "C:\Program Files\Inno Setup 6\ISCC.exe") {
+    $isccPath = "C:\Program Files\Inno Setup 6\ISCC.exe"
 }
 
-Get-ChildItem -Recurse -File -Path "dist" -Filter "*windows.msix" | Copy-Item -Destination "out\Hiddify-Windows-Setup-x64.msix" -ErrorAction SilentlyContinue
+Write-Host "Compiling Windows installer with $isccPath..."
+& $isccPath "windows\runner\hiddify_setup.iss"
 
-# windows portable
+if (Test-Path "out\Hiddify-Windows-Setup-x64.exe") {
+    $sizeMb = [math]::Round(((Get-Item "out\Hiddify-Windows-Setup-x64.exe").Length / 1MB), 2)
+    Write-Host "Installer created successfully: out\Hiddify-Windows-Setup-x64.exe (${sizeMb} MB)"
+} else {
+    Write-Error "CRITICAL: out\Hiddify-Windows-Setup-x64.exe was not created!"
+}
+
+# Windows portable ZIP
+New-Item -ItemType Directory -Force -Name "dist\tmp\hiddify-next"
 xcopy "build\windows\x64\runner\Release" "dist\tmp\hiddify-next" /E/H/C/I/Y
 xcopy ".github\help\mac-windows\*.url" "dist\tmp\hiddify-next" /E/H/C/I/Y
-Compress-Archive -Force -Path "dist\tmp\hiddify-next" -DestinationPath "out\Hiddify-Windows-Portable-x64.zip" -ErrorAction SilentlyContinue
+Compress-Archive -Force -Path "dist\tmp\hiddify-next\*" -DestinationPath "out\Hiddify-Windows-Portable-x64.zip"
 
-Remove-Item -Path "$HOME\.pub-cache\git\cache\flutter_circle_flags*" -Force -Recurse -ErrorAction SilentlyContinue
-
-Write-Host "Windows packaging completed. Contents of out:"
+Write-Host "Windows packaging completed. Contents of out/:"
 Get-ChildItem -Path "out"

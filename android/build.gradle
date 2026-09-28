@@ -13,37 +13,6 @@ subprojects {
     project.evaluationDependsOn(':app')
 }
 
-subprojects {
-    project.plugins.withId("com.android.library") {
-        project.android {
-            if (namespace == null) {
-                if (project.name == "flutter_easy_permission") {
-                    namespace = "xyz.bczl.flutter.flutter_easy_permission"
-                } else if (project.group) {
-                    namespace = project.group
-                } else {
-                    namespace = "com.hiddify.${project.name.replaceAll('-', '_')}"
-                }
-            }
-        }
-    }
-    afterEvaluate { project ->
-        if (project.hasProperty("android")) {
-            project.android {
-                if (namespace == null) {
-                    if (project.name == "flutter_easy_permission") {
-                        namespace = "xyz.bczl.flutter.flutter_easy_permission"
-                    } else if (project.group) {
-                        namespace = project.group
-                    } else {
-                        namespace = "com.hiddify.${project.name.replaceAll('-', '_')}"
-                    }
-                }
-            }
-        }
-    }
-}
-
 tasks.register("clean", Delete) {
     delete rootProject.buildDir
 }

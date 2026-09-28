@@ -159,7 +159,6 @@ jobs:
       - name: Build Windows Setup & Portable
         shell: pwsh
         run: |
-          flutter_distributor package --platform windows --targets exe --skip-clean --build-target lib/main.dart
           flutter build windows --release
           powershell -File .\scripts\package_windows.ps1
 
@@ -216,8 +215,11 @@ jobs:
       - name: Prepare Flutter code generation & translations
         run: |
           flutter pub get
-          # Patch plugins that lack namespace in AGP 8
-          find $HOME/.pub-cache -name "build.gradle" -path "*flutter_easy_permission*" -exec sed -i '/apply plugin: .com.android.library./a android { namespace "xyz.bczl.flutter.flutter_easy_permission" }' {} + || true
+          # Patch flutter_easy_permission to add namespace for AGP 8
+          find $HOME/.pub-cache -name "build.gradle" -path "*flutter_easy_permission*" | while read -r file; do
+            echo "Patching $file..."
+            sed -i 's/android {/android {\n    namespace "xyz.bczl.flutter.flutter_easy_permission"/' "$file"
+          done
           dart run build_runner build --delete-conflicting-outputs
           dart run slang
 
