@@ -2,6 +2,7 @@ package libbox
 
 import (
 	"encoding/binary"
+	"fmt"
 	"io"
 	"net"
 	"time"
@@ -169,7 +170,12 @@ func readGroups(reader io.Reader) (OutboundGroupIterator, error) {
 	return newIterator(groups), nil
 }
 
-func writeGroups(writer io.Writer, boxService *BoxService, onlyGroupitems bool) error {
+func writeGroups(writer io.Writer, boxService *BoxService, onlyGroupitems bool) (err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			err = fmt.Errorf("writeGroups panic: %v", r)
+		}
+	}()
 	historyStorage := service.PtrFromContext[urltest.HistoryStorage](boxService.ctx)
 	cacheFile := service.FromContext[adapter.CacheFile](boxService.ctx)
 	outbounds := boxService.instance.Router().Outbounds()
@@ -215,7 +221,7 @@ func writeGroups(writer io.Writer, boxService *BoxService, onlyGroupitems bool) 
 			}
 			group.items = append(group.items, &item)
 		}
-		if len(group.items) < 2 && !onlyGroupitems {
+		if len(group.items) == 0 && !onlyGroupitems {
 			continue
 		}
 		groups = append(groups, group)

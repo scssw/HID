@@ -97,6 +97,9 @@ func (s *Selector) Start() error {
 }
 
 func (s *Selector) Now() string {
+	if s == nil || s.selected == nil {
+		return ""
+	}
 	return s.selected.Tag()
 }
 

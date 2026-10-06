@@ -106,6 +106,9 @@ func (s *URLTest) Close() error {
 }
 
 func (s *URLTest) Now() string {
+	if s == nil || s.group == nil {
+		return ""
+	}
 	if s.group.selectedOutboundTCP != nil {
 		return s.group.selectedOutboundTCP.Tag()
 	} else if s.group.selectedOutboundUDP != nil {

@@ -11,13 +11,28 @@ data class ParsedOutboundGroup(
     @SerializedName("items") val items: List<ParsedOutboundGroupItem>
 ) {
     companion object {
-        fun fromOutbound(group: OutboundGroup): ParsedOutboundGroup {
-            val outboundItems = group.items
-            val items = mutableListOf<ParsedOutboundGroupItem>()
-            while (outboundItems.hasNext()) {
-                items.add(ParsedOutboundGroupItem(outboundItems.next()))
+        fun fromOutbound(group: OutboundGroup?): ParsedOutboundGroup {
+            if (group == null) {
+                return ParsedOutboundGroup("", "", "", emptyList())
             }
-            return ParsedOutboundGroup(group.tag, group.type, group.selected, items)
+            val items = mutableListOf<ParsedOutboundGroupItem>()
+            try {
+                val outboundItems = group.items
+                if (outboundItems != null) {
+                    while (outboundItems.hasNext()) {
+                        val item = outboundItems.next()
+                        if (item != null) {
+                            items.add(ParsedOutboundGroupItem(item))
+                        }
+                    }
+                }
+            } catch (ignored: Exception) {}
+            return ParsedOutboundGroup(
+                group.tag ?: "",
+                group.type ?: "",
+                group.selected ?: "",
+                items
+            )
         }
     }
 }
@@ -27,5 +42,9 @@ data class ParsedOutboundGroupItem(
     @SerializedName("type") val type: String,
     @SerializedName("url-test-delay") val urlTestDelay: Int,
 ) {
-    constructor(item: OutboundGroupItem) : this(item.tag, item.type, item.urlTestDelay)
+    constructor(item: OutboundGroupItem) : this(
+        item.tag ?: "",
+        item.type ?: "",
+        item.urlTestDelay
+    )
 }
