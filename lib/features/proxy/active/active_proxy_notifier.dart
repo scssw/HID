@@ -94,14 +94,20 @@ class ActiveProxyNotifier extends _$ActiveProxyNotifier with AppLogger {
       final mainGroup = groups.first;
       if (mainGroup.items.isEmpty) throw "no items in main group";
       final activeItem = mainGroup.items.first;
-      if ((activeItem.urlTestDelay <= 0 || activeItem.urlTestDelay >= 65000) && activeItem.selectedTag != null) {
-        for (final group in groups) {
-          if (group.tag == activeItem.tag) {
-            for (final subItem in group.items) {
-              if (subItem.tag == activeItem.selectedTag && subItem.urlTestDelay > 0 && subItem.urlTestDelay < 65000) {
-                return activeItem.copyWith(urlTestDelay: subItem.urlTestDelay);
-              }
-            }
+      if (activeItem.urlTestDelay > 0 && activeItem.urlTestDelay < 65000) {
+        return activeItem;
+      }
+      for (final group in groups) {
+        for (final item in group.items) {
+          if (!item.type.isGroup && item.urlTestDelay > 0 && item.urlTestDelay < 65000) {
+            return activeItem.copyWith(urlTestDelay: item.urlTestDelay);
+          }
+        }
+      }
+      for (final group in groups) {
+        for (final item in group.items) {
+          if (item.urlTestDelay > 0 && item.urlTestDelay < 65000) {
+            return activeItem.copyWith(urlTestDelay: item.urlTestDelay);
           }
         }
       }

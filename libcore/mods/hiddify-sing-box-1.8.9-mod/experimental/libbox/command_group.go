@@ -85,15 +85,9 @@ func (s *CommandServer) handleGroupConn(conn net.Conn, onlyGroupItems bool) erro
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-ticker.C:
-		}
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
 		case <-urlTestUpdateStream.Changes():
 			for urlTestUpdateStream.HasNext() {
 				urlTestUpdateStream.Next()
-				// val := urlTestUpdateStream.Next()
-				// log.Trace("Hiddify! Receive a change for group info ", val)
 			}
 		}
 	}
@@ -218,8 +212,33 @@ func writeGroups(writer io.Writer, boxService *BoxService, onlyGroupitems bool) 
 			if history := historyStorage.LoadURLTestHistory(targetTag); history != nil {
 				item.URLTestTime = history.Time.Unix()
 				item.URLTestDelay = int32(history.Delay)
+			} else if history := historyStorage.LoadURLTestHistory(itemTag); history != nil {
+				item.URLTestTime = history.Time.Unix()
+				item.URLTestDelay = int32(history.Delay)
 			}
 			group.items = append(group.items, &item)
+		}
+		if onlyGroupitems && len(group.items) == 0 && len(iGroup.All()) > 0 {
+			firstTag := iGroup.All()[0]
+			if firstOutbound, ok := boxService.instance.Router().Outbound(firstTag); ok {
+				var item OutboundGroupItem
+				item.Tag = firstTag
+				item.Type = firstOutbound.Type()
+				tTag := adapter.OutboundTag(firstOutbound)
+				if subGroup, isSub := firstOutbound.(adapter.OutboundGroup); isSub {
+					if now := subGroup.Now(); now != "" {
+						tTag = now
+					}
+				}
+				if history := historyStorage.LoadURLTestHistory(tTag); history != nil {
+					item.URLTestTime = history.Time.Unix()
+					item.URLTestDelay = int32(history.Delay)
+				} else if history := historyStorage.LoadURLTestHistory(firstTag); history != nil {
+					item.URLTestTime = history.Time.Unix()
+					item.URLTestDelay = int32(history.Delay)
+				}
+				group.items = append(group.items, &item)
+			}
 		}
 		if len(group.items) == 0 && !onlyGroupitems {
 			continue

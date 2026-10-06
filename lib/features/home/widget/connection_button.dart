@@ -11,6 +11,7 @@ import 'package:hiddify/features/connection/model/connection_status.dart';
 import 'package:hiddify/features/connection/notifier/connection_notifier.dart';
 import 'package:hiddify/features/connection/widget/experimental_feature_notice.dart';
 import 'package:hiddify/features/profile/notifier/active_profile_notifier.dart';
+import 'package:hiddify/features/proxy/active/active_proxy_notifier.dart';
 import 'package:hiddify/gen/assets.gen.dart';
 import 'package:hiddify/utils/alerts.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
@@ -23,6 +24,8 @@ class ConnectionButton extends HookConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final t = ref.watch(translationsProvider);
     final connectionStatus = ref.watch(connectionNotifierProvider);
+    final activeProxy = ref.watch(activeProxyNotifierProvider);
+    final delay = activeProxy.valueOrNull?.urlTestDelay ?? 0;
     final requiresReconnect = ref.watch(configOptionNotifierProvider).valueOrNull;
     final today = DateTime.now();
 
@@ -70,11 +73,13 @@ class ConnectionButton extends HookConsumerWidget {
       },
       label: switch (connectionStatus) {
         AsyncData(value: Connected()) when requiresReconnect == true => t.connection.reconnect,
+        AsyncData(value: Connected()) when delay <= 0 || delay >= 65000 => t.connection.connecting,
         AsyncData(value: final status) => status.present(t),
         _ => "",
       },
       buttonColor: switch (connectionStatus) {
         AsyncData(value: Connected()) when requiresReconnect == true => Colors.teal,
+        AsyncData(value: Connected()) when delay <= 0 || delay >= 65000 => const Color.fromARGB(255, 185, 176, 103),
         AsyncData(value: Connected()) => buttonTheme.connectedColor!,
         AsyncData(value: _) => buttonTheme.idleColor!,
         _ => Colors.red,
