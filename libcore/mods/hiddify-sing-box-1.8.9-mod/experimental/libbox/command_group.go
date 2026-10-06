@@ -203,7 +203,13 @@ func writeGroups(writer io.Writer, boxService *BoxService, onlyGroupitems bool) 
 			var item OutboundGroupItem
 			item.Tag = itemTag
 			item.Type = itemOutbound.Type()
-			if history := historyStorage.LoadURLTestHistory(adapter.OutboundTag(itemOutbound)); history != nil {
+			targetTag := adapter.OutboundTag(itemOutbound)
+			if subGroup, isSubGroup := itemOutbound.(adapter.OutboundGroup); isSubGroup {
+				if now := subGroup.Now(); now != "" {
+					targetTag = now
+				}
+			}
+			if history := historyStorage.LoadURLTestHistory(targetTag); history != nil {
 				item.URLTestTime = history.Time.Unix()
 				item.URLTestDelay = int32(history.Delay)
 			}

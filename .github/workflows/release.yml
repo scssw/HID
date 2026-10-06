@@ -9,9 +9,9 @@ on:
   workflow_dispatch:
     inputs:
       tag_name:
-        description: 'Release Tag Name (e.g. v3.0.8)'
+        description: 'Release Tag Name (e.g. v3.0.10)'
         required: false
-        default: 'v3.0.8'
+        default: 'v3.0.10'
 
 permissions:
   contents: write
@@ -181,6 +181,12 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+          cache-dependency-path: libcore/go.sum
+
       - name: Setup Java 17
         uses: actions/setup-java@v5
         with:
@@ -207,9 +213,23 @@ jobs:
       - name: Prepare Android Libcore AAR
         run: |
           mkdir -p libcore/bin
-          curl -L -o core-android.tar.gz https://github.com/hiddify/hiddify-next-core/releases/download/v3.1.8/hiddify-core-android.tar.gz
-          tar -xzf core-android.tar.gz -C libcore/bin/
-          rm -f core-android.tar.gz
+          echo "=== Compiling native libcore.aar with AnyTLS for Android arm64 ==="
+          go install -v github.com/sagernet/gomobile/cmd/gomobile@v0.1.1
+          go install -v github.com/sagernet/gomobile/cmd/gobind@v0.1.1
+          export ANDROID_NDK_HOME=$(find $ANDROID_HOME/ndk -maxdepth 1 -mindepth 1 2>/dev/null | sort -V | tail -n 1)
+          echo "Using NDK: $ANDROID_NDK_HOME"
+          gomobile init
+          TAGS="with_gvisor,with_quic,with_wireguard,with_utls,with_clash_api,with_grpc"
+          cd libcore
+          if [ -n "$ANDROID_NDK_HOME" ] && gomobile bind -v -androidapi 21 -javapkg io.nekohasekai -libname box -tags "$TAGS" -trimpath -target android/arm64 -o bin/libcore.aar github.com/sagernet/sing-box/experimental/libbox ./mobile; then
+            echo "Successfully built custom libcore.aar with AnyTLS!"
+          else
+            echo "gomobile bind failed, falling back to prebuilt..."
+            curl -L -o core-android.tar.gz https://github.com/hiddify/hiddify-next-core/releases/download/v3.1.8/hiddify-core-android.tar.gz
+            tar -xzf core-android.tar.gz -C bin/
+            rm -f core-android.tar.gz
+          fi
+          cd ..
           ls -lh libcore/bin/libcore.aar
 
       - name: Prepare Flutter code generation & translations
@@ -267,11 +287,11 @@ jobs:
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             TAG="${{ inputs.tag_name }}"
-            [ -z "$TAG" ] && TAG="v3.0.9"
+            [ -z "$TAG" ] && TAG="v3.0.10"
           elif [[ "${{ github.ref }}" == refs/tags/* ]]; then
             TAG="${GITHUB_REF#refs/tags/}"
           else
-            TAG="v3.0.9"
+            TAG="v3.0.10"
           fi
           echo "release_tag=$TAG" >> $GITHUB_OUTPUT
 
@@ -297,3 +317,4 @@ jobs:
             - Fully supports AnyTLS protocol (`anytls://` link, subscription URLs, JSON configs)
             - Support for `sing-box://` and `sinbox://` deep link imports (with auto profile naming)
             - Fully supports Hysteria 2 Port Hopping (`mport`), with automatic per-connection port randomization
+            - Fixed Android connection state hang on yellow-brown connecting button and resolved auto group latency reporting

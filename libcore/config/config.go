@@ -580,7 +580,10 @@ func writeEmbeddedRuleSet(name string) string {
 	target := filepath.Join(tempDir(), name)
 	data, err := embeddedRuleSets.ReadFile(name)
 	if err == nil {
-		_ = os.WriteFile(target, data, 0o644)
+		if writeErr := os.WriteFile(target, data, 0o644); writeErr != nil {
+			target = name
+			_ = os.WriteFile(target, data, 0o644)
+		}
 	}
 	return target
 }
@@ -591,9 +594,6 @@ func setRoutingOptions(options *option.Options, opt *HiddifyOptions) {
 	rulesets := []option.RuleSet{}
 	isAndroid := runtime.GOOS == "android"
 	routeRegion := opt.Region
-	if isAndroid && opt.EnableTun && strings.EqualFold(routeRegion, "other") {
-		routeRegion = "cn"
-	}
 
 	if opt.EnableTun && runtime.GOOS == "android" {
 		routeRules = append(

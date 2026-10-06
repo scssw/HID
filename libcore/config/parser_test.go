@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+
+	"github.com/sagernet/sing-box/option"
 )
 
 func TestParseAnyTLSLink(t *testing.T) {
@@ -84,4 +86,31 @@ func TestParseAnyTLSJson(t *testing.T) {
 	if !strings.Contains(string(out), "anytls-52978") {
 		t.Errorf("expected anytls-52978 in output, got: %s", string(out))
 	}
+}
+
+func TestBuildConfigSimulation(t *testing.T) {
+	vmessLink := "vmess://eyJhZGQiOiIxLjEuMS4xIiwiYWlkIjowLCJob3N0IjoiIiwiaWQiOiIwYzA5MTdmNC04NGYwLTRkN2ItOTUwZi03Njc5N2FjYzE2YTciLCJuZXQiOiJ0Y3AiLCJwYXRoIjoiIiwicG9ydCI6NDQzLCJwcyI6InRlc3Qtdm1lc3MiLCJzY3kiOiJhdXRvIiwic25pIjoiIiwidGxzIjoiIiwidHlwZSI6Im5vbmUiLCJ2IjoyfQ=="
+	out, err := ParseConfigContent(vmessLink, true, nil, false)
+	if err != nil {
+		t.Fatalf("ParseConfigContent failed: %v", err)
+	}
+	var opt option.Options
+	if err := opt.UnmarshalJSON(out); err != nil {
+		t.Fatalf("UnmarshalJSON failed: %v", err)
+	}
+
+	hOptions := HiddifyOptions{
+		Region: "other",
+		InboundOptions: InboundOptions{
+			EnableTun: true,
+		},
+		URLTestOptions: URLTestOptions{
+			ConnectionTestUrl: "http://cp.cloudflare.com/",
+		},
+	}
+	res, err := BuildConfigJson(hOptions, opt)
+	if err != nil {
+		t.Fatalf("BuildConfigJson failed: %v", err)
+	}
+	t.Logf("Generated Config:\n%s", res)
 }
