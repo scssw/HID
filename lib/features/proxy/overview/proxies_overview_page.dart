@@ -66,7 +66,28 @@ class ProxiesOverviewPage extends HookConsumerWidget with PresLogger {
           );
         }
 
-        final group = groups.first;
+        final group = groups.firstWhere(
+          (g) => g.items.isNotEmpty,
+          orElse: () => groups.first,
+        );
+
+        if (group.items.isEmpty) {
+          return Scaffold(
+            body: CustomScrollView(
+              slivers: [
+                appBar,
+                SliverFillRemaining(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(t.proxies.emptyProxiesMsg),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          );
+        }
 
         return Scaffold(
           body: CustomScrollView(

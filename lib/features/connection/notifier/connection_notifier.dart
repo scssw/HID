@@ -7,6 +7,7 @@ import 'package:hiddify/features/connection/data/connection_repository.dart';
 import 'package:hiddify/features/connection/model/connection_status.dart';
 import 'package:hiddify/features/profile/model/profile_entity.dart';
 import 'package:hiddify/features/profile/notifier/active_profile_notifier.dart';
+import 'package:hiddify/features/proxy/data/proxy_data_providers.dart';
 import 'package:hiddify/utils/utils.dart';
 import 'package:in_app_review/in_app_review.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
@@ -38,6 +39,14 @@ class ConnectionNotifier extends _$ConnectionNotifier with AppLogger {
                 ref.read(Preferences.storeReviewedByUser.notifier).update(true);
               }
             }
+
+            Future.delayed(const Duration(milliseconds: 600), () async {
+              try {
+                await ref.read(proxyRepositoryProvider).urlTest("select").run();
+              } catch (e) {
+                loggy.debug("auto url test error: $e");
+              }
+            });
           }
         }
       },
