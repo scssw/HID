@@ -227,7 +227,7 @@ func writeGroups(writer io.Writer, boxService *BoxService, onlyGroupitems bool) 
 		groups = append(groups, group)
 	}
 
-	err := binary.Write(writer, binary.BigEndian, uint16(len(groups)))
+	err = binary.Write(writer, binary.BigEndian, uint16(len(groups)))
 	if err != nil {
 		return err
 	}
