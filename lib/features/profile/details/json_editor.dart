@@ -111,6 +111,16 @@ const Map<String, Map<String, dynamic>> protocolSchemaValues = {
       "enabled": true,
     }
   },
+  "anytls": {
+    "type": "anytls",
+    "tag": "anytls-out",
+    "server": "127.0.0.1",
+    "server_port": 1080,
+    "password": "your_password",
+    "tls": {
+      "enabled": true,
+    }
+  },
   "shadowsocks": {
     "type": "shadowsocks",
     "tag": "ss-out",
@@ -278,6 +288,7 @@ const Map<String, List<String>> possibleValues = {
     "wireguard",
     "hysteria",
     "hysteria2",
+    "anytls",
     "tuic",
     "ssh",
     "shadowtls",

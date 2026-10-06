@@ -28,6 +28,7 @@ type _Outbound struct {
 	SelectorOptions     SelectorOutboundOptions     `json:"-"`
 	URLTestOptions      URLTestOutboundOptions      `json:"-"`
 	XrayOptions         XrayOutboundOptions         `json:"-"`
+	AnyTLSOptions       AnyTLSOutboundOptions       `json:"-"`
 	CustomOptions       map[string]interface{}      `json:"-"`
 }
 
@@ -76,6 +77,8 @@ func (h *Outbound) RawOptions() (any, error) {
 		rawOptionsPtr = &h.CustomOptions
 	case C.TypeXray:
 		rawOptionsPtr = &h.XrayOptions
+	case C.TypeAnyTLS:
+		rawOptionsPtr = &h.AnyTLSOptions
 	case "":
 		return nil, E.New("missing outbound type")
 	default:

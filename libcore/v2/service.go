@@ -8,6 +8,7 @@ import (
 	runtimeDebug "runtime/debug"
 	"time"
 
+	"github.com/hiddify/hiddify-core/config"
 	"github.com/hiddify/hiddify-core/v2/service_manager"
 
 	B "github.com/sagernet/sing-box"
@@ -40,6 +41,7 @@ func Setup(basePath string, workingPath string, tempPath string, statusPort int6
 	sWorkingPath = workingPath
 	os.Chdir(sWorkingPath)
 	sTempPath = tempPath
+	config.SetTempPath(tempPath)
 	sUserID = os.Getuid()
 	sGroupID = os.Getgid()
 

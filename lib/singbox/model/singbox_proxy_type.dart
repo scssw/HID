@@ -17,6 +17,7 @@ enum ProxyType {
   vless("VLESS"),
   tuic("TUIC"),
   hysteria2("Hysteria2"),
+  anytls("AnyTLS"),
 
   selector("Selector"),
   urltest("URLTest"),

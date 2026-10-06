@@ -25,7 +25,7 @@ abstract class LinkParser {
   }
 
   // protocols schemas
-  static const protocols = {'clash', 'clashmeta', 'sing-box', 'hiddify'};
+  static const protocols = {'clash', 'clashmeta', 'sing-box', 'sinbox', 'hiddify'};
 
   static ProfileLink? parse(String link) {
     return simple(link) ?? deep(link);
@@ -64,6 +64,7 @@ abstract class LinkParser {
         'naive' || 'naive+https' || 'naive+http' || 'naive+quic' => fragment ?? ProxyType.naive.label,
         'phttp' || 'phttps' => fragment ?? ProxyType.http.label,
         'ssr' => parseSsrRemark(trimmedLine) ?? fragment ?? ProxyType.shadowsocksr.label,
+        'anytls' => fragment ?? ProxyType.anytls.label,
         _ => null,
       };
     }
@@ -85,9 +86,12 @@ abstract class LinkParser {
       case 'clash' || 'clashmeta' when uri.authority == 'install-config':
         if (uri.authority != 'install-config' || !queryParams.containsKey('url')) return null;
         return (url: queryParams['url']!, name: queryParams['name'] ?? '');
-      case 'sing-box':
+      case 'sing-box' || 'sinbox':
         if (uri.authority != 'import-remote-profile' || !queryParams.containsKey('url')) return null;
-        return (url: queryParams['url']!, name: queryParams['name'] ?? '');
+        final name = (queryParams['name'] != null && queryParams['name']!.isNotEmpty)
+            ? queryParams['name']!
+            : (uri.hasFragment && uri.fragment.isNotEmpty ? Uri.decodeComponent(uri.fragment) : '');
+        return (url: queryParams['url']!, name: name);
       case 'hiddify':
         if (uri.authority == "import") {
           return (url: uri.path.substring(1) + (uri.hasQuery ? "?${uri.query}" : ""), name: uri.fragment);

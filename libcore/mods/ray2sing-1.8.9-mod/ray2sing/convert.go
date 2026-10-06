@@ -18,6 +18,7 @@ var configTypes = map[string]ParserFunc{
 	"vmess://":     VmessSingbox,
 	"vless://":     VlessSingbox,
 	"trojan://":    TrojanSingbox,
+	"anytls://":    AnytlsSingbox,
 	"svmess://":    VmessSingbox,
 	"svless://":    VlessSingbox,
 	"strojan://":   TrojanSingbox,
@@ -133,6 +134,8 @@ func GenerateConfigLite(input string, useXrayWhenPossible bool) (string, error) 
 				dialer = &configSingbox.SSHOptions.DialerOptions
 			case C.TypeShadowsocksR:
 				dialer = &configSingbox.ShadowsocksROptions.DialerOptions
+			case C.TypeAnyTLS:
+				dialer = &configSingbox.AnyTLSOptions.DialerOptions
 			default:
 				dialer = nil
 			}

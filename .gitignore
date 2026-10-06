@@ -89,4 +89,5 @@ build/
 构建.txt
 tmp_*
 libcore/tmp_*
+2.5.7/
 

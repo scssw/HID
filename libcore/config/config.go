@@ -44,6 +44,22 @@ const (
 
 var OutboundMainProxyTag = OutboundSelectTag
 
+// configTempPath is the app-sandbox temp directory set by v2.Setup().
+// On Android, os.TempDir() returns /data/local/tmp/ which is NOT writable
+// by the app. This variable holds the real writable temp path.
+var configTempPath string
+
+// SetTempPath sets the writable temp directory for the config package.
+func SetTempPath(p string) { configTempPath = p }
+
+// tempDir returns the best available temp directory.
+func tempDir() string {
+	if configTempPath != "" {
+		return configTempPath
+	}
+	return os.TempDir()
+}
+
 //go:embed geoip-cn.srs geosite-cn.srs
 var embeddedRuleSets embed.FS
 
@@ -561,7 +577,7 @@ func shouldUseEmbeddedRegionRuleSets(region string, isAndroid bool) bool {
 }
 
 func writeEmbeddedRuleSet(name string) string {
-	target := filepath.Join(os.TempDir(), name)
+	target := filepath.Join(tempDir(), name)
 	data, err := embeddedRuleSets.ReadFile(name)
 	if err == nil {
 		_ = os.WriteFile(target, data, 0o644)

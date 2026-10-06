@@ -61,6 +61,8 @@ func New(ctx context.Context, router adapter.Router, logger log.ContextLogger, t
 		return NewURLTest(ctx, router, logger, tag, options.URLTestOptions)
 	case C.TypeXray:
 		return NewXray2(ctx, router, logger, tag, options.XrayOptions)
+	case C.TypeAnyTLS:
+		return NewAnyTLS(ctx, router, logger, tag, options.AnyTLSOptions)
 	default:
 		return nil, E.New("unknown outbound type: ", options.Type)
 	}
