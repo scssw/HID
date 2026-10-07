@@ -71,7 +71,11 @@ class ProxiesOverviewPage extends HookConsumerWidget with PresLogger {
           orElse: () => groups.first,
         );
 
-        if (group.items.isEmpty) {
+        final itemsToShow = group.items.isNotEmpty
+            ? group.items
+            : groups.expand((g) => g.items).toSet().toList();
+
+        if (itemsToShow.isEmpty) {
           return Scaffold(
             body: CustomScrollView(
               slivers: [
@@ -101,7 +105,7 @@ class ProxiesOverviewPage extends HookConsumerWidget with PresLogger {
                       padding: const EdgeInsets.only(bottom: 86),
                       sliver: SliverList.builder(
                         itemBuilder: (_, index) {
-                          final proxy = group.items[index];
+                          final proxy = itemsToShow[index];
                           return ProxyTile(
                             proxy,
                             selected: group.selected == proxy.tag,
@@ -116,7 +120,7 @@ class ProxiesOverviewPage extends HookConsumerWidget with PresLogger {
                             },
                           );
                         },
-                        itemCount: group.items.length,
+                        itemCount: itemsToShow.length,
                       ),
                     );
                   }
@@ -127,7 +131,7 @@ class ProxiesOverviewPage extends HookConsumerWidget with PresLogger {
                       mainAxisExtent: 68,
                     ),
                     itemBuilder: (context, index) {
-                      final proxy = group.items[index];
+                      final proxy = itemsToShow[index];
                       return ProxyTile(
                         proxy,
                         selected: group.selected == proxy.tag,
@@ -144,7 +148,7 @@ class ProxiesOverviewPage extends HookConsumerWidget with PresLogger {
                         },
                       );
                     },
-                    itemCount: group.items.length,
+                    itemCount: itemsToShow.length,
                   );
                 },
               ),

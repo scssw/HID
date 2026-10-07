@@ -26,7 +26,9 @@ data class ParsedOutboundGroup(
                         }
                     }
                 }
-            } catch (ignored: Exception) {}
+            } catch (e: Exception) {
+                android.util.Log.e("OutboundMapper", "failed parsing outbound items for group: ${group.tag}", e)
+            }
             return ParsedOutboundGroup(
                 group.tag ?: "",
                 group.type ?: "",

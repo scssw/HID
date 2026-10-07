@@ -219,9 +219,9 @@ jobs:
           export ANDROID_NDK_HOME=$(find $ANDROID_HOME/ndk -maxdepth 1 -mindepth 1 2>/dev/null | sort -V | tail -n 1)
           echo "Using NDK: $ANDROID_NDK_HOME"
           gomobile init
-          TAGS="with_gvisor,with_quic,with_wireguard,with_utls,with_clash_api,with_grpc"
+          TAGS="with_gvisor,with_quic,with_wireguard,with_ech,with_utls,with_clash_api,with_grpc"
           cd libcore
-          if [ -n "$ANDROID_NDK_HOME" ] && gomobile bind -v -androidapi 21 -javapkg io.nekohasekai -libname box -tags "$TAGS" -trimpath -target android/arm64 -o bin/libcore.aar github.com/sagernet/sing-box/experimental/libbox ./mobile; then
+          if [ -n "$ANDROID_NDK_HOME" ] && gomobile bind -v -androidapi 21 -javapkg io.nekohasekai -libname box -tags "$TAGS" -trimpath -ldflags "-s -w" -target android/arm64 -o bin/libcore.aar github.com/sagernet/sing-box/experimental/libbox ./mobile; then
             echo "Successfully built custom libcore.aar with AnyTLS!"
           else
             echo "gomobile bind failed, falling back to prebuilt..."

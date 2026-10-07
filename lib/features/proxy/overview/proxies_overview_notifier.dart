@@ -67,7 +67,7 @@ class ProxiesOverviewNotifier extends _$ProxiesOverviewNotifier with AppLogger {
         .watchProxies()
         .throttleTime(
           const Duration(milliseconds: 100),
-          leading: false,
+          leading: true,
           trailing: true,
         )
         .map(

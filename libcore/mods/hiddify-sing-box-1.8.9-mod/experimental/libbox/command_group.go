@@ -102,7 +102,7 @@ func readGroups(reader io.Reader) (OutboundGroupIterator, error) {
 
 	groups := make([]*OutboundGroup, 0, groupLength)
 	for i := 0; i < int(groupLength); i++ {
-		var group OutboundGroup
+		group := new(OutboundGroup)
 		group.Tag, err = rw.ReadVString(reader)
 		if err != nil {
 			return nil, err
@@ -136,7 +136,7 @@ func readGroups(reader io.Reader) (OutboundGroupIterator, error) {
 
 		group.items = make([]*OutboundGroupItem, itemLength)
 		for j := 0; j < int(itemLength); j++ {
-			var item OutboundGroupItem
+			item := new(OutboundGroupItem)
 			item.Tag, err = rw.ReadVString(reader)
 			if err != nil {
 				return nil, err
@@ -157,9 +157,9 @@ func readGroups(reader io.Reader) (OutboundGroupIterator, error) {
 				return nil, err
 			}
 
-			group.items[j] = &item
+			group.items[j] = item
 		}
-		groups = append(groups, &group)
+		groups = append(groups, group)
 	}
 	return newIterator(groups), nil
 }
@@ -200,9 +200,10 @@ func writeGroups(writer io.Writer, boxService *BoxService, onlyGroupitems bool) 
 			if onlyGroupitems && itemTag != group.Selected {
 				continue
 			}
-			var item OutboundGroupItem
-			item.Tag = itemTag
-			item.Type = itemOutbound.Type()
+			item := &OutboundGroupItem{
+				Tag:  itemTag,
+				Type: itemOutbound.Type(),
+			}
 			targetTag := adapter.OutboundTag(itemOutbound)
 			if subGroup, isSubGroup := itemOutbound.(adapter.OutboundGroup); isSubGroup {
 				if now := subGroup.Now(); now != "" {
@@ -216,14 +217,15 @@ func writeGroups(writer io.Writer, boxService *BoxService, onlyGroupitems bool) 
 				item.URLTestTime = history.Time.Unix()
 				item.URLTestDelay = int32(history.Delay)
 			}
-			group.items = append(group.items, &item)
+			group.items = append(group.items, item)
 		}
 		if onlyGroupitems && len(group.items) == 0 && len(iGroup.All()) > 0 {
 			firstTag := iGroup.All()[0]
 			if firstOutbound, ok := boxService.instance.Router().Outbound(firstTag); ok {
-				var item OutboundGroupItem
-				item.Tag = firstTag
-				item.Type = firstOutbound.Type()
+				item := &OutboundGroupItem{
+					Tag:  firstTag,
+					Type: firstOutbound.Type(),
+				}
 				tTag := adapter.OutboundTag(firstOutbound)
 				if subGroup, isSub := firstOutbound.(adapter.OutboundGroup); isSub {
 					if now := subGroup.Now(); now != "" {
@@ -237,11 +239,14 @@ func writeGroups(writer io.Writer, boxService *BoxService, onlyGroupitems bool) 
 					item.URLTestTime = history.Time.Unix()
 					item.URLTestDelay = int32(history.Delay)
 				}
-				group.items = append(group.items, &item)
+				group.items = append(group.items, item)
 			}
 		}
 		if len(group.items) == 0 && !onlyGroupitems {
 			continue
+		}
+		if group.Selected == "" && len(group.items) > 0 {
+			group.Selected = group.items[0].Tag
 		}
 		groups = append(groups, group)
 	}

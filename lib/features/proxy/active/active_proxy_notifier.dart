@@ -91,9 +91,9 @@ class ActiveProxyNotifier extends _$ActiveProxyNotifier with AppLogger {
 
     yield* ref.watch(proxyRepositoryProvider).watchActiveProxies().map((event) => event.getOrElse((l) => throw l)).map((groups) {
       if (groups.isEmpty) throw "no active groups";
-      final mainGroup = groups.first;
-      if (mainGroup.items.isEmpty) throw "no items in main group";
-      final activeItem = mainGroup.items.first;
+      final validGroup = groups.firstWhere((g) => g.items.isNotEmpty, orElse: () => groups.first);
+      if (validGroup.items.isEmpty) throw "no items in group";
+      final activeItem = validGroup.items.first;
       if (activeItem.urlTestDelay > 0 && activeItem.urlTestDelay < 65000) {
         return activeItem;
       }

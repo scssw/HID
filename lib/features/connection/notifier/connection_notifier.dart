@@ -39,14 +39,6 @@ class ConnectionNotifier extends _$ConnectionNotifier with AppLogger {
                 ref.read(Preferences.storeReviewedByUser.notifier).update(true);
               }
             }
-
-            Future.delayed(const Duration(milliseconds: 600), () async {
-              try {
-                await ref.read(proxyRepositoryProvider).urlTest("select").run();
-              } catch (e) {
-                loggy.debug("auto url test error: $e");
-              }
-            });
           }
         }
       },
