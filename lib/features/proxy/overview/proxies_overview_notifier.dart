@@ -74,7 +74,7 @@ class ProxiesOverviewNotifier extends _$ProxiesOverviewNotifier with AppLogger {
           (event) => event.getOrElse(
             (err) {
               loggy.warning("error receiving proxies", err);
-              return <ProxyGroupEntity>[];
+              throw err;
             },
           ),
         )
@@ -85,48 +85,41 @@ class ProxiesOverviewNotifier extends _$ProxiesOverviewNotifier with AppLogger {
     List<ProxyGroupEntity> proxies,
     ProxiesSort sortBy,
   ) async {
-    try {
-      final groupWithSelected = {
-        for (final o in proxies) o.tag: o.selected,
-      };
-      final sortedProxies = <ProxyGroupEntity>[];
-      for (final group in proxies) {
-        final sortedItems = switch (sortBy) {
-          ProxiesSort.name => group.items.sortedWith((a, b) {
-              if (a.type.isGroup && !b.type.isGroup) return -1;
-              if (!a.type.isGroup && b.type.isGroup) return 1;
-              return a.tag.compareTo(b.tag);
-            }),
-          ProxiesSort.delay => group.items.sortedWith((a, b) {
-              if (a.type.isGroup && !b.type.isGroup) return -1;
-              if (!a.type.isGroup && b.type.isGroup) return 1;
+    final groupWithSelected = {
+      for (final o in proxies) o.tag: o.selected,
+    };
+    final sortedProxies = <ProxyGroupEntity>[];
+    for (final group in proxies) {
+      final sortedItems = switch (sortBy) {
+        ProxiesSort.name => group.items.sortedWith((a, b) {
+            if (a.type.isGroup && !b.type.isGroup) return -1;
+            if (!a.type.isGroup && b.type.isGroup) return 1;
+            return a.tag.compareTo(b.tag);
+          }),
+        ProxiesSort.delay => group.items.sortedWith((a, b) {
+            if (a.type.isGroup && !b.type.isGroup) return -1;
+            if (!a.type.isGroup && b.type.isGroup) return 1;
 
-              final ai = a.urlTestDelay;
-              final bi = b.urlTestDelay;
-              if (ai == 0 && bi == 0) return a.tag.compareTo(b.tag);
-              if (ai == 0 && bi > 0) return 1;
-              if (ai > 0 && bi == 0) return -1;
-              final cmp = ai.compareTo(bi);
-              if (cmp != 0) return cmp;
-              return a.tag.compareTo(b.tag);
-            }),
-          ProxiesSort.unsorted => group.items,
-        };
-        final items = <ProxyItemEntity>[];
-        for (final item in sortedItems) {
-          if (groupWithSelected.keys.contains(item.tag)) {
-            items.add(item.copyWith(selectedTag: groupWithSelected[item.tag]));
-          } else {
-            items.add(item);
-          }
+            final ai = a.urlTestDelay;
+            final bi = b.urlTestDelay;
+            if (ai == 0 && bi == 0) return -1;
+            if (ai == 0 && bi > 0) return 1;
+            if (ai > 0 && bi == 0) return -1;
+            return ai.compareTo(bi);
+          }),
+        ProxiesSort.unsorted => group.items,
+      };
+      final items = <ProxyItemEntity>[];
+      for (final item in sortedItems) {
+        if (groupWithSelected.keys.contains(item.tag)) {
+          items.add(item.copyWith(selectedTag: groupWithSelected[item.tag]));
+        } else {
+          items.add(item);
         }
-        sortedProxies.add(group.copyWith(items: items));
       }
-      return sortedProxies;
-    } catch (e, st) {
-      loggy.error("error sorting outbounds", e, st);
-      return proxies;
+      sortedProxies.add(group.copyWith(items: items));
     }
+    return sortedProxies;
   }
 
   Future<void> changeProxy(String groupTag, String outboundTag) async {

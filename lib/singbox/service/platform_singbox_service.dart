@@ -170,27 +170,12 @@ class PlatformSingboxService with InfraLogger implements SingboxService {
     return groupsChannel.receiveBroadcastStream().map(
       (event) {
         if (event case String _) {
-          try {
-            final decoded = jsonDecode(event);
-            if (decoded is List) {
-              final groups = <SingboxOutboundGroup>[];
-              for (final e in decoded) {
-                if (e is Map<String, dynamic>) {
-                  try {
-                    groups.add(SingboxOutboundGroup.fromJson(e));
-                  } catch (err, st) {
-                    loggy.error("failed parsing outbound group", err, st);
-                  }
-                }
-              }
-              return groups;
-            }
-          } catch (err, st) {
-            loggy.error("failed decoding groups json: $event", err, st);
-          }
+          return (jsonDecode(event) as List).map((e) {
+            return SingboxOutboundGroup.fromJson(e as Map<String, dynamic>);
+          }).toList();
         }
         loggy.error("[group client] unexpected type, msg: $event");
-        return <SingboxOutboundGroup>[];
+        throw "invalid type";
       },
     );
   }
@@ -201,27 +186,12 @@ class PlatformSingboxService with InfraLogger implements SingboxService {
     return activeGroupsChannel.receiveBroadcastStream().map(
       (event) {
         if (event case String _) {
-          try {
-            final decoded = jsonDecode(event);
-            if (decoded is List) {
-              final groups = <SingboxOutboundGroup>[];
-              for (final e in decoded) {
-                if (e is Map<String, dynamic>) {
-                  try {
-                    groups.add(SingboxOutboundGroup.fromJson(e));
-                  } catch (err, st) {
-                    loggy.error("failed parsing active group", err, st);
-                  }
-                }
-              }
-              return groups;
-            }
-          } catch (err, st) {
-            loggy.error("failed decoding active groups json: $event", err, st);
-          }
+          return (jsonDecode(event) as List).map((e) {
+            return SingboxOutboundGroup.fromJson(e as Map<String, dynamic>);
+          }).toList();
         }
         loggy.error("[active group client] unexpected type, msg: $event");
-        return <SingboxOutboundGroup>[];
+        throw "invalid type";
       },
     );
   }

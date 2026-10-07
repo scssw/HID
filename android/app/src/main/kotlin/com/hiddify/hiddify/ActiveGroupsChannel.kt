@@ -25,24 +25,9 @@ class ActiveGroupsChannel(private val scope: CoroutineScope) : FlutterPlugin,
     private var event: EventChannel.EventSink? = null
 
     override fun updateGroups(groups: List<OutboundGroup>) {
-        try {
-            MainActivity.instance.runOnUiThread {
-                try {
-                    val parsedGroups = groups.mapNotNull { group ->
-                        try {
-                            ParsedOutboundGroup.fromOutbound(group)
-                        } catch (e: Exception) {
-                            Log.e(TAG, "failed parsing active group", e)
-                            null
-                        }
-                    }
-                    event?.success(gson.toJson(parsedGroups))
-                } catch (e: Exception) {
-                    Log.e(TAG, "failed sending active groups event", e)
-                }
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "failed updating active groups", e)
+        MainActivity.instance.runOnUiThread {
+            val parsedGroups = groups.map { group -> ParsedOutboundGroup.fromOutbound(group) }
+            event?.success(gson.toJson(parsedGroups))
         }
     }
 

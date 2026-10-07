@@ -11,10 +11,7 @@ data class ParsedOutboundGroup(
     @SerializedName("items") val items: List<ParsedOutboundGroupItem>
 ) {
     companion object {
-        fun fromOutbound(group: OutboundGroup?): ParsedOutboundGroup {
-            if (group == null) {
-                return ParsedOutboundGroup("", "", "", emptyList())
-            }
+        fun fromOutbound(group: OutboundGroup): ParsedOutboundGroup {
             val items = mutableListOf<ParsedOutboundGroupItem>()
             try {
                 val outboundItems = group.items
@@ -44,9 +41,5 @@ data class ParsedOutboundGroupItem(
     @SerializedName("type") val type: String,
     @SerializedName("url-test-delay") val urlTestDelay: Int,
 ) {
-    constructor(item: OutboundGroupItem) : this(
-        item.tag ?: "",
-        item.type ?: "",
-        item.urlTestDelay
-    )
+    constructor(item: OutboundGroupItem) : this(item.tag, item.type, item.urlTestDelay)
 }

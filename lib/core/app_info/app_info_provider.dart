@@ -19,8 +19,8 @@ class AppInfo extends _$AppInfo {
     final environment = ref.watch(environmentProvider);
     return AppInfoEntity(
       name: packageInfo.appName,
-      version: "3.0.8",
-      buildNumber: "30008",
+      version: "3.0.15",
+      buildNumber: "30015",
       release: Release.read(),
       operatingSystem: Platform.operatingSystem,
       operatingSystemVersion: Platform.operatingSystemVersion,
