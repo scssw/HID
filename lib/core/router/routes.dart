@@ -5,6 +5,7 @@ import 'package:hiddify/features/common/adaptive_root_scaffold.dart';
 import 'package:hiddify/features/config_option/overview/config_options_page.dart';
 import 'package:hiddify/features/config_option/widget/quick_settings_modal.dart';
 
+import 'package:hiddify/features/domain_rules/overview/rules_overview_page.dart';
 import 'package:hiddify/features/home/widget/home_page.dart';
 import 'package:hiddify/features/intro/widget/intro_page.dart';
 import 'package:hiddify/features/log/overview/logs_overview_page.dart';
@@ -64,6 +65,10 @@ GlobalKey<NavigatorState>? _dynamicRootKey = useMobileRouter ? rootNavigatorKey 
         TypedGoRoute<LogsOverviewRoute>(
           path: "logs",
           name: LogsOverviewRoute.name,
+        ),
+        TypedGoRoute<RulesOverviewRoute>(
+          path: "rules",
+          name: RulesOverviewRoute.name,
         ),
         TypedGoRoute<AboutRoute>(
           path: "about",
@@ -130,6 +135,10 @@ class MobileWrapperRoute extends ShellRouteData {
     TypedGoRoute<LogsOverviewRoute>(
       path: "/logs",
       name: LogsOverviewRoute.name,
+    ),
+    TypedGoRoute<RulesOverviewRoute>(
+      path: "/rules",
+      name: RulesOverviewRoute.name,
     ),
     TypedGoRoute<AboutRoute>(
       path: "/about",
@@ -272,6 +281,24 @@ class LogsOverviewRoute extends GoRouteData {
       );
     }
     return const NoTransitionPage(name: name, child: LogsOverviewPage());
+  }
+}
+
+class RulesOverviewRoute extends GoRouteData {
+  const RulesOverviewRoute();
+  static const name = "Rules";
+
+  static final GlobalKey<NavigatorState>? $parentNavigatorKey = _dynamicRootKey;
+
+  @override
+  Page<void> buildPage(BuildContext context, GoRouterState state) {
+    if (useMobileRouter) {
+      return const MaterialPage(
+        name: name,
+        child: RulesOverviewPage(),
+      );
+    }
+    return const NoTransitionPage(name: name, child: RulesOverviewPage());
   }
 }
 

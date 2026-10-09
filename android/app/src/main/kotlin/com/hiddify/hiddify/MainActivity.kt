@@ -104,16 +104,20 @@ class MainActivity : FlutterFragmentActivity(), ServiceConnection.Callback {
     }
 
     override fun onServiceWriteLog(message: String?) {
-        if (logList.size > 300) {
-            logList.removeFirst()
+        synchronized(logList) {
+            if (logList.size > 300) {
+                logList.removeFirst()
+            }
+            logList.addLast(message)
         }
-        logList.addLast(message)
         logCallback?.invoke(false)
     }
 
     override fun onServiceResetLogs(messages: MutableList<String>) {
-        logList.clear()
-        logList.addAll(messages)
+        synchronized(logList) {
+            logList.clear()
+            logList.addAll(messages)
+        }
         logCallback?.invoke(true)
     }
 

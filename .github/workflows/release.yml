@@ -9,9 +9,9 @@ on:
   workflow_dispatch:
     inputs:
       tag_name:
-        description: 'Release Tag Name (e.g. v3.0.15)'
+        description: 'Release Tag Name (e.g. v3.0.16)'
         required: false
-        default: 'v3.0.15'
+        default: 'v3.0.16'
 
 permissions:
   contents: write
@@ -286,11 +286,11 @@ jobs:
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             TAG="${{ inputs.tag_name }}"
-            [ -z "$TAG" ] && TAG="v3.0.15"
+            [ -z "$TAG" ] && TAG="v3.0.16"
           elif [[ "${{ github.ref }}" == refs/tags/* ]]; then
             TAG="${GITHUB_REF#refs/tags/}"
           else
-            TAG="v3.0.15"
+            TAG="v3.0.16"
           fi
           echo "release_tag=$TAG" >> $GITHUB_OUTPUT
 
@@ -313,6 +313,13 @@ jobs:
             - **Android**: APK (arm64-v8a)
 
             ### What's New:
+            - **Dynamic Connection Topology (连接流向)**:
+              - Real-time animated flow graph on both desktop and mobile platforms
+              - Visual flow partitioning for Proxy (代理) and Direct (直连) routes
+              - Quick routing actions: set Proxy, Direct, or clear custom rules with right-click or tap
+              - Built-in Custom Domain Rules Manager (规则管理) with deletion and manual additions
+              - Window Always-on-top (置顶) shortcut and collapse/expand controls
+              - Live event log and Clash API streaming with instant domain capture on Android and macOS/Windows
             - Fully supports AnyTLS protocol (`anytls://` link, subscription URLs, JSON configs)
             - Restored official 2.5.7 connection button UX (yellow-brown breathing glow on connecting, Wi-Fi icon, latency ping shimmer, connecting node display)
             - Fixed Android release build R8 obfuscation issue preventing TUN interface creation and Go JNI communication

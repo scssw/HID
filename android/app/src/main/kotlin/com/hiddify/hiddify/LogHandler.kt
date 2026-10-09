@@ -20,9 +20,19 @@ class LogHandler : FlutterPlugin {
         logsChannel.setStreamHandler(object : EventChannel.StreamHandler {
             override fun onListen(arguments: Any?, events: EventChannel.EventSink?) {
                 val activity = MainActivity.instance
-                events?.success(activity.logList)
+                activity.runOnUiThread {
+                    val logsCopy = synchronized(activity.logList) {
+                        ArrayList(activity.logList)
+                    }
+                    events?.success(logsCopy)
+                }
                 activity.logCallback = {
-                    events?.success(activity.logList)
+                    activity.runOnUiThread {
+                        val logsCopy = synchronized(activity.logList) {
+                            ArrayList(activity.logList)
+                        }
+                        events?.success(logsCopy)
+                    }
                 }
             }
 

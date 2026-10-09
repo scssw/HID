@@ -56,6 +56,7 @@ final tabLocations = [
   const ConfigOptionsRoute().location,
   const SettingsRoute().location,
   const LogsOverviewRoute().location,
+  const RulesOverviewRoute().location,
 ];
 
 int getCurrentIndex(BuildContext context) {

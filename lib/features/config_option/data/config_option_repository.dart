@@ -2,13 +2,13 @@ import 'package:dartx/dartx.dart';
 import 'package:fpdart/fpdart.dart';
 import 'package:hiddify/core/model/optional_range.dart';
 import 'package:hiddify/core/model/region.dart';
-import 'package:hiddify/core/preferences/general_preferences.dart';
 
 import 'package:hiddify/core/utils/exception_handler.dart';
 import 'package:hiddify/core/utils/json_converters.dart';
 import 'package:hiddify/core/utils/preferences_utils.dart';
 import 'package:hiddify/features/config_option/model/config_option_failure.dart';
 
+import 'package:hiddify/features/domain_rules/notifier/custom_domain_rules_notifier.dart';
 import 'package:hiddify/features/log/model/log_level.dart';
 import 'package:hiddify/singbox/model/singbox_config_enum.dart';
 import 'package:hiddify/singbox/model/singbox_config_option.dart';
@@ -45,7 +45,7 @@ abstract class ConfigOptions {
   );
   static final logLevel = PreferencesNotifier.create<LogLevel, String>(
     "log-level",
-    LogLevel.warn,
+    LogLevel.info,
     mapFrom: LogLevel.values.byName,
     mapTo: (value) => value.name,
   );
@@ -426,7 +426,15 @@ abstract class ConfigOptions {
   static final singboxConfigOptions = FutureProvider<SingboxConfigOption>(
     (ref) async {
       // final region = ref.watch(Preferences.region);
-      final rules = <SingboxRule>[];
+      final customRules = ref.watch(customDomainRulesProvider);
+      final rules = <SingboxRule>[
+        ...customRules.map(
+          (r) => SingboxRule(
+            domains: "domain:${r.domain}",
+            outbound: r.isDirect ? RuleOutbound.bypass : RuleOutbound.proxy,
+          ),
+        ),
+      ];
       // final rules = switch (region) {
       //   Region.ir => [
       //       const SingboxRule(
@@ -474,7 +482,7 @@ abstract class ConfigOptions {
         blockAds: ref.watch(blockAds),
         useXrayCoreWhenPossible: ref.watch(useXrayCoreWhenPossible),
         executeConfigAsIs: false,
-        logLevel: ref.watch(logLevel),
+        logLevel: ref.watch(logLevel) == LogLevel.warn ? LogLevel.info : ref.watch(logLevel),
         resolveDestination: ref.watch(resolveDestination),
         ipv6Mode: ref.watch(ipv6Mode),
         remoteDnsAddress: ref.watch(remoteDnsAddress),

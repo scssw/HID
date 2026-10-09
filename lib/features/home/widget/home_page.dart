@@ -6,13 +6,10 @@ import 'package:hiddify/core/localization/translations.dart';
 import 'package:hiddify/core/model/failures.dart';
 import 'package:hiddify/core/router/router.dart';
 import 'package:hiddify/features/common/nested_app_bar.dart';
-import 'package:hiddify/features/home/widget/connection_button.dart';
+import 'package:hiddify/features/home/widget/desktop_home_body.dart';
 import 'package:hiddify/features/home/widget/empty_profiles_home_body.dart';
 import 'package:hiddify/features/profile/notifier/active_profile_notifier.dart';
 import 'package:hiddify/features/profile/widget/profile_tile.dart';
-import 'package:hiddify/features/proxy/active/active_proxy_delay_indicator.dart';
-import 'package:hiddify/features/proxy/active/active_proxy_footer.dart';
-import 'package:hiddify/features/proxy/active/active_proxy_notifier.dart';
 import 'package:hiddify/utils/utils.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:sliver_tools/sliver_tools.dart';
@@ -62,24 +59,9 @@ class HomePage extends HookConsumerWidget {
                 AsyncData(value: final profile?) => MultiSliver(
                     children: [
                       ProfileTile(profile: profile, isMain: true),
-                      SliverFillRemaining(
+                      const SliverFillRemaining(
                         hasScrollBody: false,
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            const Expanded(
-                              child: Column(
-                                mainAxisSize: MainAxisSize.min,
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  ConnectionButton(),
-                                  ActiveProxyDelayIndicator(),
-                                ],
-                              ),
-                            ),
-                            if (MediaQuery.sizeOf(context).width < 840) const ActiveProxyFooter(),
-                          ],
-                        ),
+                        child: DesktopHomeBody(),
                       ),
                     ],
                   ),
