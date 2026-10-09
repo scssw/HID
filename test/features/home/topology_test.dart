@@ -491,5 +491,94 @@ void main() {
       expect(layout.nodes.any((n) => n.name == '直连'), isTrue);
       expect(layout.links.isNotEmpty, isTrue);
     });
+
+    test('computeTopologyLayout passes separate outbound traffic stats and link photon dynamics', () {
+      final aggregate = ConnectionsAggregate(
+        total: 15,
+        hosts: [
+          const ConnectionAggHost(
+            name: 'douyin.com',
+            count: 10,
+            speed: 2500000, // 2.5 MB/s
+            uploadBytes: 100000,
+            downloadBytes: 25000000,
+            activity: 0.85,
+            flows: [
+              ConnectionAggFlow(outbound: '直连', count: 10),
+            ],
+          ),
+          const ConnectionAggHost(
+            name: 'youtube.com',
+            count: 5,
+            speed: 1200000, // 1.2 MB/s
+            uploadBytes: 50000,
+            downloadBytes: 15000000,
+            activity: 0.75,
+            flows: [
+              ConnectionAggFlow(outbound: '代理', count: 5),
+            ],
+          ),
+        ],
+        outbounds: const [
+          ConnectionAggOutbound(
+            name: '代理',
+            count: 5,
+            uploadSpeed: 45000,
+            downloadSpeed: 1200000,
+            uploadBytes: 50000,
+            downloadBytes: 15000000,
+          ),
+          ConnectionAggOutbound(
+            name: '直连',
+            count: 10,
+            uploadSpeed: 38000,
+            downloadSpeed: 2500000,
+            uploadBytes: 100000,
+            downloadBytes: 25000000,
+          ),
+        ],
+        timestamp: DateTime.now(),
+      );
+
+      final layout = computeTopologyLayout(
+        aggregate: aggregate,
+        width: 800,
+        height: 400,
+        sourceLabel: '本机设备',
+        othersLabel: '其他目标',
+        primaryColor: const Color(0xFF6C5CE7),
+        isDark: true,
+      );
+
+      // Verify separate outbound traffic stats in TopoLayoutResult
+      expect(layout.proxyOutbound, isNotNull);
+      expect(layout.proxyOutbound!.name, '代理');
+      expect(layout.proxyOutbound!.downloadSpeed, 1200000);
+      expect(layout.proxyOutbound!.uploadSpeed, 45000);
+      expect(layout.proxyOutbound!.downloadBytes, 15000000);
+
+      expect(layout.directOutbound, isNotNull);
+      expect(layout.directOutbound!.name, '直连');
+      expect(layout.directOutbound!.downloadSpeed, 2500000);
+      expect(layout.directOutbound!.uploadSpeed, 38000);
+      expect(layout.directOutbound!.downloadBytes, 25000000);
+
+      // Verify link photon dynamics (speed and activity on douyin and youtube links)
+      final douyinLinks = layout.links.where((l) => l.id.contains('douyin.com')).toList();
+      expect(douyinLinks.isNotEmpty, isTrue);
+      for (final l in douyinLinks) {
+        expect(l.speed, 2500000);
+        expect(l.activity, 0.85);
+        expect(l.zone, 'direct');
+      }
+
+      final youtubeLinks = layout.links.where((l) => l.id.contains('youtube.com')).toList();
+      expect(youtubeLinks.isNotEmpty, isTrue);
+      for (final l in youtubeLinks) {
+        expect(l.speed, 1200000);
+        expect(l.activity, 0.75);
+        expect(l.zone, 'proxy');
+      }
+    });
   });
 }

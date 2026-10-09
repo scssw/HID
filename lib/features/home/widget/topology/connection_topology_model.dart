@@ -76,6 +76,8 @@ class TopoLink {
   final Color sourceColor;
   final Color targetColor;
   final String zone; // 'proxy' or 'direct'
+  final int speed; // bytes/s
+  final double activity; // 0.0 to 1.0
 
   const TopoLink({
     required this.id,
@@ -92,6 +94,8 @@ class TopoLink {
     required this.sourceColor,
     required this.targetColor,
     required this.zone,
+    this.speed = 0,
+    this.activity = 0.0,
   });
 }
 
@@ -110,22 +114,38 @@ class ConnectionAggHost {
   final int count;
   final List<ConnectionAggFlow> flows;
   final bool recent;
+  final int speed; // bytes/s
+  final int uploadBytes;
+  final int downloadBytes;
+  final double activity; // 0.0 to 1.0
 
   const ConnectionAggHost({
     required this.name,
     required this.count,
     required this.flows,
     this.recent = false,
+    this.speed = 0,
+    this.uploadBytes = 0,
+    this.downloadBytes = 0,
+    this.activity = 0.0,
   });
 }
 
 class ConnectionAggOutbound {
   final String name;
   final int count;
+  final int uploadSpeed; // bytes/s
+  final int downloadSpeed; // bytes/s
+  final int uploadBytes; // cumulative bytes
+  final int downloadBytes; // cumulative bytes
 
   const ConnectionAggOutbound({
     required this.name,
     required this.count,
+    this.uploadSpeed = 0,
+    this.downloadSpeed = 0,
+    this.uploadBytes = 0,
+    this.downloadBytes = 0,
   });
 }
 
@@ -157,6 +177,8 @@ class TopoLayoutResult {
   final int proxyHostCount;
   final int directHostCount;
   final String? expandedZone;
+  final ConnectionAggOutbound? proxyOutbound;
+  final ConnectionAggOutbound? directOutbound;
 
   const TopoLayoutResult({
     required this.nodes,
@@ -165,6 +187,8 @@ class TopoLayoutResult {
     this.proxyHostCount = 0,
     this.directHostCount = 0,
     this.expandedZone,
+    this.proxyOutbound,
+    this.directOutbound,
   });
 
   static const empty = TopoLayoutResult(nodes: [], links: []);
@@ -177,7 +201,7 @@ const double padTop = 26.0;
 const double padBottom = 16.0;
 const double colXSource = 0.12;
 const double colXHost = 0.50;
-const double colXOutbound = 0.88;
+const double colXOutbound = 0.86;
 
 const double barHeightMax = 32.0;
 const double minBarHeight = 3.0;
@@ -265,6 +289,13 @@ TopoLayoutResult computeTopologyLayout({
   final colorDirect = isDark ? const Color(0xFF2DD4BF) : const Color(0xFF0D9488);
   final colorProxyHost = isDark ? const Color(0xFF93C5FD) : const Color(0xFF3B82F6);
   final colorDirectHost = isDark ? const Color(0xFF5EEAD4) : const Color(0xFF0F766E);
+
+  ConnectionAggOutbound? proxyOutbound;
+  ConnectionAggOutbound? directOutbound;
+  for (final o in aggregate.outbounds) {
+    if (o.name == '代理') proxyOutbound = o;
+    if (o.name == '直连') directOutbound = o;
+  }
 
   // 1. Classify hosts into Proxy and Direct
   final rawProxyHosts = <ConnectionAggHost>[];
@@ -417,6 +448,8 @@ TopoLayoutResult computeTopologyLayout({
             targetColor: colorProxyHost,
             path: getSankeyPath(sX, sY, tX, tY, linkSourceH, linkTargetH),
             zone: 'proxy',
+            speed: h.speed,
+            activity: h.activity,
           ),
         );
 
@@ -443,6 +476,8 @@ TopoLayoutResult computeTopologyLayout({
             targetColor: colorProxy,
             path: getSankeyPath(oSX, oSY, oTX, oTY, linkTargetH, linkOutboundH),
             zone: 'proxy',
+            speed: h.speed,
+            activity: h.activity,
           ),
         );
 
@@ -536,6 +571,8 @@ TopoLayoutResult computeTopologyLayout({
             targetColor: colorDirectHost,
             path: getSankeyPath(sX, sY, tX, tY, linkSourceH, linkTargetH),
             zone: 'direct',
+            speed: h.speed,
+            activity: h.activity,
           ),
         );
 
@@ -562,6 +599,8 @@ TopoLayoutResult computeTopologyLayout({
             targetColor: colorDirect,
             path: getSankeyPath(oSX, oSY, oTX, oTY, linkTargetH, linkOutboundH),
             zone: 'direct',
+            speed: h.speed,
+            activity: h.activity,
           ),
         );
 
@@ -577,5 +616,7 @@ TopoLayoutResult computeTopologyLayout({
     proxyHostCount: proxyDisplayHosts.length,
     directHostCount: directDisplayHosts.length,
     expandedZone: expandedZone,
+    proxyOutbound: proxyOutbound,
+    directOutbound: directOutbound,
   );
 }

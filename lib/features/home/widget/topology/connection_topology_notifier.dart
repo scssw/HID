@@ -9,6 +9,7 @@ import 'package:hiddify/core/directories/directories_provider.dart';
 import 'package:hiddify/features/connection/model/connection_status.dart';
 import 'package:hiddify/features/connection/notifier/connection_notifier.dart';
 import 'package:hiddify/features/home/widget/topology/connection_topology_model.dart';
+import 'package:hiddify/features/stats/notifier/stats_notifier.dart';
 import 'package:hiddify/singbox/service/singbox_service_provider.dart';
 import 'package:hiddify/utils/platform_utils.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
@@ -19,6 +20,9 @@ class _VisitedSite {
   int count;
   int uploadBytes;
   int downloadBytes;
+  int uploadSpeed; // bytes/s
+  int downloadSpeed; // bytes/s
+  double activityFactor; // 0.0 to 1.0
   String outbound; // '代理' or '直连'
   DateTime lastSeen;
   bool isCurrentlyActive;
@@ -27,10 +31,31 @@ class _VisitedSite {
     required this.name,
     this.uploadBytes = 0,
     this.downloadBytes = 0,
+    this.uploadSpeed = 0,
+    this.downloadSpeed = 0,
+    this.activityFactor = 0.0,
     required this.outbound,
     required this.lastSeen,
     this.isCurrentlyActive = false,
   }) : count = 1;
+}
+
+class _ConnSnapshot {
+  final String connId;
+  final String host;
+  final String outbound;
+  int lastUpload;
+  int lastDownload;
+  DateTime lastPollTime;
+
+  _ConnSnapshot({
+    required this.connId,
+    required this.host,
+    required this.outbound,
+    required this.lastUpload,
+    required this.lastDownload,
+    required this.lastPollTime,
+  });
 }
 
 class ConnectionTopologyState {
@@ -89,19 +114,37 @@ class ConnectionTopologyNotifier extends StateNotifier<ConnectionTopologyState> 
   StreamSubscription? _logSubscription;
   late final Dio _dio;
 
+  bool _isPolling = false;
+  String? _cachedController;
+  String? _cachedSecret;
+  DateTime _lastConfigCheck = DateTime.fromMillisecondsSinceEpoch(0);
+
   final Map<String, _VisitedSite> _visitedSites = {};
+  final Map<String, _ConnSnapshot> _connSnapshots = {};
   final Set<String> _seenConnectionIds = <String>{};
   final Set<int> _processedLogLines = <int>{};
   final Map<String, String> _dnsCache = <String, String>{};
   String? _recentHost;
-  int _logFileOffset = 0;
+
+  int _proxyTotalUpload = 0;
+  int _proxyTotalDownload = 0;
+  int _directTotalUpload = 0;
+  int _directTotalDownload = 0;
+
+  int _proxyUploadSpeed = 0;
+  int _proxyDownloadSpeed = 0;
+  int _directUploadSpeed = 0;
+  int _directDownloadSpeed = 0;
+
+  int _lastGlobalDownlinkTotal = 0;
+  int _lastGlobalUplinkTotal = 0;
 
   ConnectionTopologyNotifier(this._ref)
       : super(ConnectionTopologyState(aggregate: ConnectionsAggregate.empty())) {
     _dio = Dio(
       BaseOptions(
-        connectTimeout: const Duration(seconds: 2),
-        receiveTimeout: const Duration(seconds: 2),
+        connectTimeout: const Duration(milliseconds: 1500),
+        receiveTimeout: const Duration(milliseconds: 1500),
       ),
     );
     _dio.httpClientAdapter = IOHttpClientAdapter(
@@ -115,7 +158,8 @@ class ConnectionTopologyNotifier extends StateNotifier<ConnectionTopologyState> 
   }
 
   void _startTracking() {
-    _pollTimer = Timer.periodic(const Duration(milliseconds: 350), (_) {
+    // Poll every 800ms to balance responsiveness and system resource usage
+    _pollTimer = Timer.periodic(const Duration(milliseconds: 800), (_) {
       _pollActiveConnections();
     });
 
@@ -151,17 +195,17 @@ class ConnectionTopologyNotifier extends StateNotifier<ConnectionTopologyState> 
     for (final line in lines) {
       if (line.isEmpty) continue;
       _checkDnsLogLine(line);
+      final lineHash = line.hashCode;
+      if (_processedLogLines.contains(lineHash)) continue;
+
+      _processedLogLines.add(lineHash);
+      if (_processedLogLines.length > 5000) {
+        _processedLogLines.clear();
+      }
+
       final parsed = _parseLogLine(line);
       if (parsed != null) {
-        final lineHash = line.hashCode;
-        final isNew = !_processedLogLines.contains(lineHash);
-        if (isNew) {
-          _processedLogLines.add(lineHash);
-          if (_processedLogLines.length > 3000) {
-            _processedLogLines.clear();
-          }
-        }
-        _recordTarget(parsed.host, parsed.outbound, 0, 0, isNew: isNew, isActive: true);
+        _recordTarget(parsed.host, parsed.outbound, 0, 0, isNew: true, isActive: true);
         hasNewActivity = true;
       }
     }
@@ -172,46 +216,71 @@ class ConnectionTopologyNotifier extends StateNotifier<ConnectionTopologyState> 
   }
 
   Future<void> _pollActiveConnections() async {
-    final connStatus = _ref.read(connectionNotifierProvider).valueOrNull;
-    final isConnected = connStatus is Connected;
-    final isConnecting = connStatus is Connecting;
+    if (_isPolling) return;
+    _isPolling = true;
 
-    if (!isConnected && !isConnecting) {
-      if (state.aggregate.total > 0 || _visitedSites.isNotEmpty) {
-        _visitedSites.clear();
-        _seenConnectionIds.clear();
-        _processedLogLines.clear();
-        state = state.copyWith(aggregate: ConnectionsAggregate.empty());
+    try {
+      final connStatus = _ref.read(connectionNotifierProvider).valueOrNull;
+      final isConnected = connStatus is Connected;
+      final isConnecting = connStatus is Connecting;
+
+      if (!isConnected && !isConnecting) {
+        if (state.aggregate.total > 0 || _visitedSites.isNotEmpty) {
+          _visitedSites.clear();
+          _seenConnectionIds.clear();
+          _connSnapshots.clear();
+          _processedLogLines.clear();
+          _proxyTotalUpload = 0;
+          _proxyTotalDownload = 0;
+          _directTotalUpload = 0;
+          _directTotalDownload = 0;
+          _proxyUploadSpeed = 0;
+          _proxyDownloadSpeed = 0;
+          _directUploadSpeed = 0;
+          _directDownloadSpeed = 0;
+          state = state.copyWith(aggregate: ConnectionsAggregate.empty());
+        }
+        return;
       }
-      return;
-    }
 
-    if (_logSubscription == null) {
-      _subscribeToLogs();
-    }
+      if (_logSubscription == null) {
+        _subscribeToLogs();
+      }
 
-    final dirs = _ref.read(appDirectoriesProvider).valueOrNull;
-    if (dirs == null) return;
+      final dirs = _ref.read(appDirectoriesProvider).valueOrNull;
+      if (dirs == null) return;
 
-    final workingDir = dirs.workingDir;
-    bool hasNewActivity = false;
+      // Reset currently active flags before evaluating active connections
+      for (final s in _visitedSites.values) {
+        s.isCurrentlyActive = false;
+      }
 
-    // Reset currently active flags before checking Clash API
-    for (final s in _visitedSites.values) {
-      s.isCurrentlyActive = false;
-    }
+      bool hasClashSuccess = false;
+      final now = DateTime.now();
 
-    // 1. Check Clash API (/connections) using controller & secret from current-config.json
-    final configFile = File(p.join(workingDir.path, 'current-config.json'));
-    if (configFile.existsSync()) {
-      try {
-        final configJson = jsonDecode(configFile.readAsStringSync()) as Map<String, dynamic>;
-        final exp = configJson['experimental'] as Map<String, dynamic>?;
-        final clashApi = exp?['clash_api'] as Map<String, dynamic>?;
-        if (clashApi != null) {
-          final controller = clashApi['external_controller'] as String? ?? '127.0.0.1:16756';
-          final secret = clashApi['secret'] as String? ?? '';
+      // Cache Clash API credentials: read asynchronously at most once every 5 seconds
+      if (_cachedController == null || now.difference(_lastConfigCheck).inSeconds >= 5) {
+        _lastConfigCheck = now;
+        final configFile = File(p.join(dirs.workingDir.path, 'current-config.json'));
+        if (await configFile.exists()) {
+          try {
+            final raw = await configFile.readAsString();
+            final configJson = jsonDecode(raw) as Map<String, dynamic>;
+            final exp = configJson['experimental'] as Map<String, dynamic>?;
+            final clashApi = exp?['clash_api'] as Map<String, dynamic>?;
+            if (clashApi != null) {
+              _cachedController = clashApi['external_controller'] as String? ?? '127.0.0.1:16756';
+              _cachedSecret = clashApi['secret'] as String? ?? '';
+            }
+          } catch (_) {}
+        }
+      }
 
+      final controller = _cachedController;
+      final secret = _cachedSecret ?? '';
+
+      if (controller != null && controller.isNotEmpty) {
+        try {
           final url = 'http://$controller/connections';
           final response = await _dio.get<Map<String, dynamic>>(
             url,
@@ -223,28 +292,34 @@ class ConnectionTopologyNotifier extends StateNotifier<ConnectionTopologyState> 
           );
 
           if (response.statusCode == 200 && response.data != null) {
+            hasClashSuccess = true;
             final connections = response.data!['connections'] as List?;
             if (connections != null) {
+              final currentIds = <String>{};
+              int pUpSpeed = 0;
+              int pDownSpeed = 0;
+              int dUpSpeed = 0;
+              int dDownSpeed = 0;
+              final hostSpeedUp = <String, int>{};
+              final hostSpeedDown = <String, int>{};
+
               for (final raw in connections) {
                 if (raw is! Map<String, dynamic>) continue;
                 final meta = raw['metadata'] as Map<String, dynamic>?;
                 if (meta == null) continue;
 
                 final connId = raw['id']?.toString() ?? '';
-                final isNewConnection = connId.isNotEmpty && !_seenConnectionIds.contains(connId);
                 if (connId.isNotEmpty) {
-                  _seenConnectionIds.add(connId);
+                  currentIds.add(connId);
                 }
 
                 final rawHost = (meta['host'] as String? ?? '').trim();
                 final rawIp = (meta['destinationIP'] as String? ?? '').trim();
                 final destPort = meta['destinationPort']?.toString() ?? '';
 
-                // Filter internal/DNS
                 if (destPort == '53') continue;
                 if (rawIp == '172.19.0.2' || rawIp == '127.0.0.1') continue;
 
-                // Prefer domain name over IP, check DNS cache if host is empty
                 var target = rawHost;
                 if (target.isEmpty && rawIp.isNotEmpty) {
                   target = _dnsCache[rawIp] ?? rawIp;
@@ -259,7 +334,6 @@ class ConnectionTopologyNotifier extends StateNotifier<ConnectionTopologyState> 
 
                 final chains = (raw['chains'] as List?)?.map((e) => e.toString().toLowerCase()).toList() ?? [];
                 final rule = (raw['rule'] as String? ?? '').toLowerCase();
-
                 final isDirect = chains.any((c) => c.contains('direct') || c.contains('bypass')) ||
                     rule.contains('direct') ||
                     rule.contains('bypass');
@@ -268,58 +342,157 @@ class ConnectionTopologyNotifier extends StateNotifier<ConnectionTopologyState> 
                 final up = (raw['upload'] as num?)?.toInt() ?? 0;
                 final down = (raw['download'] as num?)?.toInt() ?? 0;
 
+                final isNewConn = connId.isNotEmpty && !_connSnapshots.containsKey(connId);
+                final prevSnapshot = _connSnapshots[connId];
+
+                int deltaUp = 0;
+                int deltaDown = 0;
+                double dtSec = 0.8;
+
+                if (prevSnapshot != null) {
+                  deltaUp = math.max(0, up - prevSnapshot.lastUpload);
+                  deltaDown = math.max(0, down - prevSnapshot.lastDownload);
+                  dtSec = math.max(0.1, now.difference(prevSnapshot.lastPollTime).inMilliseconds / 1000.0);
+                  prevSnapshot.lastUpload = up;
+                  prevSnapshot.lastDownload = down;
+                  prevSnapshot.lastPollTime = now;
+                } else if (connId.isNotEmpty) {
+                  deltaUp = up;
+                  deltaDown = down;
+                  _connSnapshots[connId] = _ConnSnapshot(
+                    connId: connId,
+                    host: target,
+                    outbound: outbound,
+                    lastUpload: up,
+                    lastDownload: down,
+                    lastPollTime: now,
+                  );
+                }
+
+                final cUpSpeed = (deltaUp / dtSec).round();
+                final cDownSpeed = (deltaDown / dtSec).round();
+
+                if (isDirect) {
+                  _directTotalUpload += deltaUp;
+                  _directTotalDownload += deltaDown;
+                  dUpSpeed += cUpSpeed;
+                  dDownSpeed += cDownSpeed;
+                } else {
+                  _proxyTotalUpload += deltaUp;
+                  _proxyTotalDownload += deltaDown;
+                  pUpSpeed += cUpSpeed;
+                  pDownSpeed += cDownSpeed;
+                }
+
+                final cleanT = _cleanTargetName(target);
+                if (cleanT.isNotEmpty) {
+                  hostSpeedUp[cleanT] = (hostSpeedUp[cleanT] ?? 0) + cUpSpeed;
+                  hostSpeedDown[cleanT] = (hostSpeedDown[cleanT] ?? 0) + cDownSpeed;
+                }
+
                 _recordTarget(
                   target,
                   outbound,
-                  up,
-                  down,
+                  deltaUp,
+                  deltaDown,
                   isActive: true,
-                  isNew: isNewConnection,
+                  isNew: isNewConn,
                 );
-                hasNewActivity = true;
+              }
+
+              // Clean up closed connections
+              _connSnapshots.removeWhere((id, _) => !currentIds.contains(id));
+
+              _proxyUploadSpeed = pUpSpeed;
+              _proxyDownloadSpeed = pDownSpeed;
+              _directUploadSpeed = dUpSpeed;
+              _directDownloadSpeed = dDownSpeed;
+
+              // Update host speeds and smooth activityFactor
+              for (final s in _visitedSites.values) {
+                final upSpd = hostSpeedUp[s.name] ?? 0;
+                final downSpd = hostSpeedDown[s.name] ?? 0;
+                final totalSpd = upSpd + downSpd;
+                s.uploadSpeed = upSpd;
+                s.downloadSpeed = downSpd;
+
+                if (totalSpd > 0) {
+                  final kb = totalSpd / 1024.0;
+                  final targetAct = (math.log(math.max(1.0, kb)) / math.log(3072.0)).clamp(0.18, 1.0);
+                  s.activityFactor = math.max(targetAct, s.activityFactor * 0.80);
+                } else {
+                  s.activityFactor = s.activityFactor * 0.70;
+                  if (s.activityFactor < 0.05) s.activityFactor = 0.0;
+                }
               }
             }
           }
+        } catch (_) {
+          // Clash API poll skipped
         }
-      } catch (_) {
-        // Clash API poll skipped or transient error
       }
-    }
 
-    if (_seenConnectionIds.length > 5000) {
-      _seenConnectionIds.clear();
-    }
+      // Fallback: If Clash API is not responding or on Android log mode,
+      // use Riverpod statsNotifierProvider for global speed & byte delta
+      if (!hasClashSuccess) {
+        final stats = _ref.read(statsNotifierProvider).asData?.value;
+        if (stats != null) {
+          final gDown = stats.downlink;
+          final gUp = stats.uplink;
+          final gDownTotal = stats.downlinkTotal;
+          final gUpTotal = stats.uplinkTotal;
 
-    // 2. Read newly appended lines in box.log
-    final logFile = File(p.join(workingDir.path, 'box.log'));
-    if (logFile.existsSync()) {
-      try {
-        final len = logFile.lengthSync();
-        if (_logFileOffset == 0 && len > 0) {
-          _logFileOffset = math.max(0, len - 32768);
-        }
-        if (len > _logFileOffset) {
-          final stream = logFile.openRead(_logFileOffset, len);
-          final content = await stream.transform(utf8.decoder).join();
-          _logFileOffset = len;
+          final deltaDownTotal = _lastGlobalDownlinkTotal > 0 ? math.max(0, gDownTotal - _lastGlobalDownlinkTotal) : 0;
+          final deltaUpTotal = _lastGlobalUplinkTotal > 0 ? math.max(0, gUpTotal - _lastGlobalUplinkTotal) : 0;
+          _lastGlobalDownlinkTotal = gDownTotal;
+          _lastGlobalUplinkTotal = gUpTotal;
 
-          final lines = const LineSplitter().convert(content);
-          for (final line in lines) {
-            _checkDnsLogLine(line);
-            final parsed = _parseLogLine(line);
-            if (parsed != null) {
-              _recordTarget(parsed.host, parsed.outbound, 0, 0, isNew: true, isActive: true);
-              hasNewActivity = true;
+          final activeDirect = _visitedSites.values.where((s) => s.outbound == '直连' && (s.isCurrentlyActive || s.name == _recentHost)).toList();
+          final activeProxy = _visitedSites.values.where((s) => s.outbound == '代理' && (s.isCurrentlyActive || s.name == _recentHost)).toList();
+
+          if (activeDirect.isNotEmpty && activeProxy.isEmpty) {
+            _directDownloadSpeed = gDown;
+            _directUploadSpeed = gUp;
+            _directTotalDownload += deltaDownTotal;
+            _directTotalUpload += deltaUpTotal;
+            _proxyDownloadSpeed = 0;
+            _proxyUploadSpeed = 0;
+            for (final s in activeDirect) {
+              s.downloadSpeed = (gDown / activeDirect.length).round();
+              s.uploadSpeed = (gUp / activeDirect.length).round();
+              final kb = (s.downloadSpeed + s.uploadSpeed) / 1024.0;
+              s.activityFactor = (math.log(math.max(1.0, kb)) / math.log(3072.0)).clamp(0.18, 1.0);
             }
+          } else if (activeProxy.isNotEmpty && activeDirect.isEmpty) {
+            _proxyDownloadSpeed = gDown;
+            _proxyUploadSpeed = gUp;
+            _proxyTotalDownload += deltaDownTotal;
+            _proxyTotalUpload += deltaUpTotal;
+            _directDownloadSpeed = 0;
+            _directUploadSpeed = 0;
+            for (final s in activeProxy) {
+              s.downloadSpeed = (gDown / activeProxy.length).round();
+              s.uploadSpeed = (gUp / activeProxy.length).round();
+              final kb = (s.downloadSpeed + s.uploadSpeed) / 1024.0;
+              s.activityFactor = (math.log(math.max(1.0, kb)) / math.log(3072.0)).clamp(0.18, 1.0);
+            }
+          } else if (activeProxy.isNotEmpty && activeDirect.isNotEmpty) {
+            final pRatio = activeProxy.length / (activeProxy.length + activeDirect.length);
+            _proxyDownloadSpeed = (gDown * pRatio).round();
+            _proxyUploadSpeed = (gUp * pRatio).round();
+            _directDownloadSpeed = gDown - _proxyDownloadSpeed;
+            _directUploadSpeed = gUp - _proxyUploadSpeed;
+            _proxyTotalDownload += (deltaDownTotal * pRatio).round();
+            _proxyTotalUpload += (deltaUpTotal * pRatio).round();
+            _directTotalDownload += deltaDownTotal - (deltaDownTotal * pRatio).round();
+            _directTotalUpload += deltaUpTotal - (deltaUpTotal * pRatio).round();
           }
         }
-      } catch (_) {
-        // Log reading fallback
       }
-    }
 
-    if (hasNewActivity || state.aggregate.hosts.length != _visitedSites.length) {
       _rebuildAggregate();
+    } finally {
+      _isPolling = false;
     }
   }
 
@@ -345,16 +518,8 @@ class ConnectionTopologyNotifier extends StateNotifier<ConnectionTopologyState> 
     }
   }
 
-  void _recordTarget(
-    String target,
-    String outbound,
-    int up,
-    int down, {
-    bool isActive = false,
-    bool isNew = false,
-  }) {
+  String _cleanTargetName(String target) {
     var cleanTarget = target.toLowerCase().trim();
-    // Strip trailing port
     final colonIdx = cleanTarget.lastIndexOf(':');
     if (colonIdx > 0 && !cleanTarget.contains(']')) {
       cleanTarget = cleanTarget.substring(0, colonIdx);
@@ -362,11 +527,21 @@ class ConnectionTopologyNotifier extends StateNotifier<ConnectionTopologyState> 
     if (cleanTarget.startsWith('[') && cleanTarget.endsWith(']')) {
       cleanTarget = cleanTarget.substring(1, cleanTarget.length - 1);
     }
-
-    // Resolve from DNS cache if it's an IP
     if (_dnsCache.containsKey(cleanTarget)) {
       cleanTarget = _dnsCache[cleanTarget]!;
     }
+    return cleanTarget;
+  }
+
+  void _recordTarget(
+    String target,
+    String outbound,
+    int deltaUp,
+    int deltaDown, {
+    bool isActive = false,
+    bool isNew = false,
+  }) {
+    final cleanTarget = _cleanTargetName(target);
 
     if (cleanTarget.isEmpty ||
         cleanTarget == 'localhost' ||
@@ -384,8 +559,8 @@ class ConnectionTopologyNotifier extends StateNotifier<ConnectionTopologyState> 
         existing.lastSeen = DateTime.now();
         _recentHost = cleanTarget;
       }
-      existing.uploadBytes = math.max(existing.uploadBytes, up);
-      existing.downloadBytes = math.max(existing.downloadBytes, down);
+      existing.uploadBytes += deltaUp;
+      existing.downloadBytes += deltaDown;
       existing.outbound = outbound;
       if (isActive) {
         existing.isCurrentlyActive = true;
@@ -394,8 +569,8 @@ class ConnectionTopologyNotifier extends StateNotifier<ConnectionTopologyState> 
       _recentHost = cleanTarget;
       _visitedSites[cleanTarget] = _VisitedSite(
         name: cleanTarget,
-        uploadBytes: up,
-        downloadBytes: down,
+        uploadBytes: deltaUp,
+        downloadBytes: deltaDown,
         outbound: outbound,
         lastSeen: DateTime.now(),
         isCurrentlyActive: isActive,
@@ -406,9 +581,6 @@ class ConnectionTopologyNotifier extends StateNotifier<ConnectionTopologyState> 
   _ParsedLog? _parseLogLine(String line) {
     if (line.contains('127.0.0.1') || line.contains('::1')) return null;
 
-    // Match real outbound connection lines in sing-box:
-    // e.g. outbound/direct[direct]: outbound connection to domain.com:443
-    // e.g. outbound/vless[NATUS:...]: outbound connection to domain.com:443
     final outboundConnMatch = RegExp(
       r'outbound/([a-zA-Z0-9_\-]+)(?:\[([^\]]*)\])?:\s+outbound\s+(?:packet\s+)?connection\s+to\s+([a-zA-Z0-9.\-_]+|\[[a-fA-F0-9:]+\])(?::\d+)?',
     ).firstMatch(line);
@@ -460,7 +632,6 @@ class ConnectionTopologyNotifier extends StateNotifier<ConnectionTopologyState> 
     proxyList.sort(sorter);
     directList.sort(sorter);
 
-    // Keep up to 35 proxy targets and 35 direct targets independently!
     final topProxy = proxyList.take(35).toList();
     final topDirect = directList.take(35).toList();
 
@@ -482,16 +653,33 @@ class ConnectionTopologyNotifier extends StateNotifier<ConnectionTopologyState> 
         name: site.name,
         count: site.count,
         recent: site.name == _recentHost || site.isCurrentlyActive,
+        speed: site.uploadSpeed + site.downloadSpeed,
+        uploadBytes: site.uploadBytes,
+        downloadBytes: site.downloadBytes,
+        activity: site.activityFactor,
         flows: [
           ConnectionAggFlow(outbound: site.outbound, count: site.count),
         ],
       );
     }).toList();
 
-    // Outbounds: Always ordered with '代理' on top and '直连' below!
     final outbounds = [
-      ConnectionAggOutbound(name: '代理', count: math.max(1, totalProxy)),
-      ConnectionAggOutbound(name: '直连', count: math.max(1, totalDirect)),
+      ConnectionAggOutbound(
+        name: '代理',
+        count: math.max(1, totalProxy),
+        uploadSpeed: _proxyUploadSpeed,
+        downloadSpeed: _proxyDownloadSpeed,
+        uploadBytes: _proxyTotalUpload,
+        downloadBytes: _proxyTotalDownload,
+      ),
+      ConnectionAggOutbound(
+        name: '直连',
+        count: math.max(1, totalDirect),
+        uploadSpeed: _directUploadSpeed,
+        downloadSpeed: _directDownloadSpeed,
+        uploadBytes: _directTotalUpload,
+        downloadBytes: _directTotalDownload,
+      ),
     ];
 
     final aggregate = ConnectionsAggregate(
@@ -508,10 +696,6 @@ class ConnectionTopologyNotifier extends StateNotifier<ConnectionTopologyState> 
     state = state.copyWith(searchQuery: query);
   }
 
-  /// Toggle outbound filter:
-  /// - clicking '直连' shows only direct domains
-  /// - clicking '代理' (the node above) shows only proxy domains
-  /// - clicking again or empty space restores all
   void toggleOutboundFilter(String outboundName) {
     if (state.activeOutboundFilter == outboundName) {
       state = state.copyWith(clearOutboundFilter: true);

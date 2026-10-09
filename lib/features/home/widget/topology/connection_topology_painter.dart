@@ -2,24 +2,48 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:hiddify/features/home/widget/topology/connection_topology_model.dart';
 
+String formatTrafficSpeed(int bytesPerSec) {
+  if (bytesPerSec <= 0) return '0 B/s';
+  if (bytesPerSec < 1024) return '$bytesPerSec B/s';
+  if (bytesPerSec < 1024 * 1024) {
+    return '${(bytesPerSec / 1024).toStringAsFixed(1)} K/s';
+  }
+  if (bytesPerSec < 1024 * 1024 * 1024) {
+    return '${(bytesPerSec / (1024 * 1024)).toStringAsFixed(1)} M/s';
+  }
+  return '${(bytesPerSec / (1024 * 1024 * 1024)).toStringAsFixed(2)} G/s';
+}
+
+String formatTrafficBytes(int bytes) {
+  if (bytes <= 0) return '0 B';
+  if (bytes < 1024) return '$bytes B';
+  if (bytes < 1024 * 1024) {
+    return '${(bytes / 1024).toStringAsFixed(1)} KB';
+  }
+  if (bytes < 1024 * 1024 * 1024) {
+    return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
+  }
+  return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(2)} GB';
+}
+
 class ConnectionTopologyPainter extends CustomPainter {
   final TopoLayoutResult layout;
   final Set<String>? highlightedIds;
-  final double animationProgress;
+  final Animation<double> animation;
   final bool isDark;
   final String colDeviceLabel;
   final String colTargetLabel;
   final String colOutboundLabel;
 
-  const ConnectionTopologyPainter({
+  ConnectionTopologyPainter({
     required this.layout,
     this.highlightedIds,
-    required this.animationProgress,
+    required this.animation,
     required this.isDark,
     required this.colDeviceLabel,
     required this.colTargetLabel,
     required this.colOutboundLabel,
-  });
+  }) : super(repaint: animation);
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -80,7 +104,7 @@ class ConnectionTopologyPainter extends CustomPainter {
       final isHl = highlightedIds?.contains(link.id) ?? false;
       final opacity = (highlightedIds != null && highlightedIds!.isNotEmpty)
           ? (isHl ? 0.95 : 0.28)
-          : 0.72; // Bright default!
+          : (0.72 + link.activity.clamp(0.0, 1.0) * 0.22); // Brighten active links!
 
       final bounds = link.path.getBounds();
       final shader = LinearGradient(
@@ -105,10 +129,10 @@ class ConnectionTopologyPainter extends CustomPainter {
       }
     }
 
-    // 4. Flowing particles along the exact Bezier curve ribbons (blue & green streams)
+    // 4. Dynamic flowing particles along the exact Bezier curve ribbons (blue & green streams)
     _drawFlowParticles(canvas, size);
 
-    // 5. Nodes and labels
+    // 5. Nodes, labels, and separate outbound traffic counters
     for (final node in layout.nodes) {
       final isHl = highlightedIds?.contains(node.id) ?? false;
       final opacity = (highlightedIds != null && highlightedIds!.isNotEmpty)
@@ -183,6 +207,11 @@ class ConnectionTopologyPainter extends CustomPainter {
 
         // Draw side label for source/outbound
         _drawBarLabel(canvas, node, fgColor, opacity);
+
+        // For Outbound nodes (代理 & 直连), draw dedicated separate traffic counter underneath!
+        if (node.type == TopoNodeType.outbound) {
+          _drawOutboundTraffic(canvas, node, size, fgColor, faintColor);
+        }
       }
     }
   }
@@ -252,15 +281,140 @@ class ConnectionTopologyPainter extends CustomPainter {
     tp.paint(canvas, Offset(lx, ly));
   }
 
+  void _drawOutboundTraffic(
+    Canvas canvas,
+    TopoNode node,
+    Size size,
+    Color fgColor,
+    Color faintColor,
+  ) {
+    final isProxy = node.zone == 'proxy';
+    final outboundData = isProxy ? layout.proxyOutbound : layout.directOutbound;
+    final downSpeed = outboundData?.downloadSpeed ?? 0;
+    final upSpeed = outboundData?.uploadSpeed ?? 0;
+    final totalBytes = (outboundData?.downloadBytes ?? 0) + (outboundData?.uploadBytes ?? 0);
+
+    final downStr = formatTrafficSpeed(downSpeed);
+    final upStr = formatTrafficSpeed(upSpeed);
+    final totalStr = formatTrafficBytes(totalBytes);
+
+    final downColor = isDark ? const Color(0xFFF87171) : const Color(0xFFDC2626);
+    final upColor = isDark ? const Color(0xFF4ADE80) : const Color(0xFF16A34A);
+
+    final speedSpan = TextSpan(
+      children: [
+        TextSpan(
+          text: '↓ ',
+          style: TextStyle(
+            color: downColor,
+            fontSize: 8.5,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        TextSpan(
+          text: '$downStr ',
+          style: TextStyle(
+            color: fgColor.withOpacity(0.9),
+            fontSize: 8.5,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+        TextSpan(
+          text: '↑ ',
+          style: TextStyle(
+            color: upColor,
+            fontSize: 8.5,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        TextSpan(
+          text: upStr,
+          style: TextStyle(
+            color: fgColor.withOpacity(0.9),
+            fontSize: 8.5,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+      ],
+    );
+    final tpSpeed = TextPainter(text: speedSpan, textDirection: TextDirection.ltr)..layout();
+
+    final totalSpan = TextSpan(
+      children: [
+        TextSpan(
+          text: '流量 ',
+          style: TextStyle(
+            color: faintColor.withOpacity(0.85),
+            fontSize: 8.0,
+          ),
+        ),
+        TextSpan(
+          text: totalStr,
+          style: TextStyle(
+            color: fgColor.withOpacity(0.85),
+            fontSize: 8.0,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ],
+    );
+    final tpTotal = TextPainter(text: totalSpan, textDirection: TextDirection.ltr)..layout();
+
+    final pillW = math.max(tpSpeed.width, tpTotal.width) + 10.0;
+    const pillH = 25.0;
+
+    final rightX = math.min(size.width - 6.0, node.x + node.width + 50.0);
+    final leftX = rightX - pillW;
+    final topY = node.y + node.height + 4.0;
+
+    final rrect = RRect.fromRectAndRadius(
+      Rect.fromLTWH(leftX, topY, pillW, pillH),
+      const Radius.circular(5.0),
+    );
+
+    final bgPaint = Paint()
+      ..color = (isDark ? const Color(0xFF1E222D) : Colors.white).withOpacity(0.75)
+      ..style = PaintingStyle.fill;
+    canvas.drawRRect(rrect, bgPaint);
+
+    final borderPaint = Paint()
+      ..color = node.color.withOpacity(0.35)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 0.8;
+    canvas.drawRRect(rrect, borderPaint);
+
+    tpSpeed.paint(canvas, Offset(leftX + 5.0, topY + 2.5));
+    tpTotal.paint(canvas, Offset(leftX + 5.0, topY + 13.5));
+  }
+
   void _drawFlowParticles(Canvas canvas, Size size) {
     if (layout.links.isEmpty) return;
+
+    final progress = animation.value;
 
     for (var i = 0; i < layout.links.length; i++) {
       final link = layout.links[i];
       if (layout.expandedZone != null && link.zone != layout.expandedZone) continue;
 
-      // Stagger particles across links
-      final t = (animationProgress + (i * 0.17)) % 1.0;
+      final activity = link.activity.clamp(0.0, 1.0);
+      final isFast = activity > 0.05 || link.speed > 0;
+
+      // Photon count: 1 for idle, up to 5 for high-speed streaming
+      final int count;
+      if (activity > 0.65 || link.speed >= 1024 * 1024) {
+        count = 5;
+      } else if (activity > 0.35 || link.speed >= 256 * 1024) {
+        count = 4;
+      } else if (activity > 0.12 || link.speed >= 30 * 1024) {
+        count = 3;
+      } else if (isFast) {
+        count = 2;
+      } else {
+        count = 1;
+      }
+
+      // Speed multiplier: 1.0x (idle) to 3.2x (high-speed)
+      final speedMult = 1.0 + activity * 2.2;
 
       final x0 = link.sourceX;
       final y0 = link.sourceY + link.heightSource / 2;
@@ -268,37 +422,63 @@ class ConnectionTopologyPainter extends CustomPainter {
       final y1 = link.targetY + link.heightTarget / 2;
       final xi = (x0 + x1) / 2;
 
-      // Exact cubic bezier curve centerline interpolation
-      final oneMinusT = 1.0 - t;
-      final px = oneMinusT * oneMinusT * oneMinusT * x0 +
-          3.0 * oneMinusT * oneMinusT * t * xi +
-          3.0 * oneMinusT * t * t * xi +
-          t * t * t * x1;
-      final py = oneMinusT * oneMinusT * oneMinusT * y0 +
-          3.0 * oneMinusT * oneMinusT * t * y0 +
-          3.0 * oneMinusT * t * t * y1 +
-          t * t * t * y1;
+      for (var p = 0; p < count; p++) {
+        final phaseOffset = p / count;
+        final t = ((progress * speedMult) + phaseOffset + (i * 0.19)) % 1.0;
 
-      final particleColor = Color.lerp(link.sourceColor, link.targetColor, t) ?? link.targetColor;
+        // Exact cubic bezier curve centerline interpolation
+        final oneMinusT = 1.0 - t;
+        final px = oneMinusT * oneMinusT * oneMinusT * x0 +
+            3.0 * oneMinusT * oneMinusT * t * xi +
+            3.0 * oneMinusT * t * t * xi +
+            t * t * t * x1;
+        final py = oneMinusT * oneMinusT * oneMinusT * y0 +
+            3.0 * oneMinusT * oneMinusT * t * y0 +
+            3.0 * oneMinusT * t * t * y1 +
+            t * t * t * y1;
 
-      // Outer glow
-      final glowPaint = Paint()
-        ..color = particleColor.withOpacity(0.35)
-        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 2.5);
-      canvas.drawCircle(Offset(px, py), 4.0, glowPaint);
+        final particleColor = Color.lerp(link.sourceColor, link.targetColor, t) ?? link.targetColor;
 
-      // Inner bright particle
-      final corePaint = Paint()
-        ..color = Colors.white.withOpacity(0.95)
-        ..style = PaintingStyle.fill;
-      canvas.drawCircle(Offset(px, py), 2.2, corePaint);
+        // Comet tail for active photons
+        if (isFast && t > 0.02) {
+          final tailT = (t - 0.035 * speedMult).clamp(0.0, 1.0);
+          final oneMinusTail = 1.0 - tailT;
+          final tx = oneMinusTail * oneMinusTail * oneMinusTail * x0 +
+              3.0 * oneMinusTail * oneMinusTail * tailT * xi +
+              3.0 * oneMinusTail * tailT * tailT * xi +
+              tailT * tailT * tailT * x1;
+          final ty = oneMinusTail * oneMinusTail * oneMinusTail * y0 +
+              3.0 * oneMinusTail * oneMinusTail * tailT * y0 +
+              3.0 * oneMinusTail * tailT * tailT * y1 +
+              tailT * tailT * tailT * y1;
+
+          final tailPaint = Paint()
+            ..color = particleColor.withOpacity((0.25 + activity * 0.35) * (1.0 - (t - 0.5).abs() * 0.5))
+            ..strokeWidth = 1.8 + activity * 1.5
+            ..strokeCap = StrokeCap.round;
+          canvas.drawLine(Offset(tx, ty), Offset(px, py), tailPaint);
+        }
+
+        // Outer glow
+        final glowRadius = 3.6 + activity * 2.8;
+        final glowPaint = Paint()
+          ..color = particleColor.withOpacity(0.35 + activity * 0.35)
+          ..maskFilter = MaskFilter.blur(BlurStyle.normal, glowRadius * 0.65);
+        canvas.drawCircle(Offset(px, py), glowRadius, glowPaint);
+
+        // Inner bright particle
+        final coreRadius = 2.0 + activity * 1.0;
+        final corePaint = Paint()
+          ..color = Colors.white.withOpacity(0.95)
+          ..style = PaintingStyle.fill;
+        canvas.drawCircle(Offset(px, py), coreRadius, corePaint);
+      }
     }
   }
 
   @override
   bool shouldRepaint(covariant ConnectionTopologyPainter oldDelegate) {
-    return oldDelegate.animationProgress != animationProgress ||
-        oldDelegate.highlightedIds != highlightedIds ||
+    return oldDelegate.highlightedIds != highlightedIds ||
         oldDelegate.isDark != isDark ||
         oldDelegate.layout != layout;
   }

@@ -60,14 +60,33 @@ class ConnectionTopologyCard extends HookConsumerWidget {
           },
         );
         WidgetsBinding.instance.addObserver(observer);
+
+        WindowListener? winListener;
+        if (PlatformUtils.isDesktop) {
+          winListener = _TopologyWindowListener(
+            onHidden: () {
+              if (animController.isAnimating) {
+                animController.stop();
+              }
+            },
+            onShown: () {
+              if (!animController.isAnimating) {
+                animController.repeat();
+              }
+            },
+          );
+          windowManager.addListener(winListener);
+        }
+
         return () {
           WidgetsBinding.instance.removeObserver(observer);
+          if (winListener != null) {
+            windowManager.removeListener(winListener);
+          }
         };
       },
       [],
     );
-
-    final animValue = useAnimation(animController);
 
     // Track expanded single flow ('proxy' or 'direct') on double click
     final expandedZone = useState<String?>(null);
@@ -402,7 +421,7 @@ class ConnectionTopologyCard extends HookConsumerWidget {
                                       painter: ConnectionTopologyPainter(
                                         layout: layout,
                                         highlightedIds: highlighted,
-                                        animationProgress: animValue,
+                                        animation: animController,
                                         isDark: isDark,
                                         colDeviceLabel: "本机设备",
                                         colTargetLabel: "访问网站",
@@ -866,4 +885,20 @@ class _TopologyLifecycleObserver extends WidgetsBindingObserver {
       onResumed();
     }
   }
+}
+
+class _TopologyWindowListener extends WindowListener {
+  final VoidCallback onHidden;
+  final VoidCallback onShown;
+
+  _TopologyWindowListener({required this.onHidden, required this.onShown});
+
+  @override
+  void onWindowMinimize() => onHidden();
+
+  @override
+  void onWindowRestore() => onShown();
+
+  @override
+  void onWindowFocus() => onShown();
 }
