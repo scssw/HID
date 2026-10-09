@@ -15,6 +15,7 @@ class AppDelegate: FlutterAppDelegate {
                 print("Error requesting notification authorization: \(error)")
             }
         }
+        super.applicationDidFinishLaunching(aNotification)
     }
 
 

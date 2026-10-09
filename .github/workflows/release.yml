@@ -54,6 +54,9 @@ jobs:
           cd libcore
           echo "=== Compiling native arm64 libcore.dylib ==="
           export CGO_ENABLED=1
+          export MACOSX_DEPLOYMENT_TARGET=10.15
+          export CGO_CFLAGS="-mmacosx-version-min=10.15"
+          export CGO_LDFLAGS="-mmacosx-version-min=10.15"
           TAGS="with_gvisor,with_quic,with_wireguard,with_utls,with_clash_api,with_grpc,with_dhcp,with_low_memory,with_conntrack"
 
           if ! GOOS=darwin GOARCH=arm64 go build -v -trimpath -tags "$TAGS" -buildmode=c-shared -o bin/libcore.dylib ./custom 2>&1 | tee /tmp/arm64.log; then
@@ -63,7 +66,7 @@ jobs:
           fi
 
           echo "=== Compiling amd64 libcore.dylib ==="
-          printf '#!/bin/sh\nexec clang -arch x86_64 "$@"\n' > /tmp/x86_64-clang
+          printf '#!/bin/sh\nexec clang -arch x86_64 -mmacosx-version-min=10.15 "$@"\n' > /tmp/x86_64-clang
           chmod +x /tmp/x86_64-clang
 
           if CC=/tmp/x86_64-clang GOOS=darwin GOARCH=amd64 go build -v -trimpath -tags "$TAGS" -buildmode=c-shared -o bin/libcore-amd64.dylib ./custom 2>&1 | tee /tmp/amd64.log; then

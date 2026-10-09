@@ -49,9 +49,6 @@ class SystemTrayNotifier extends _$SystemTrayNotifier with AppLogger {
       setIcon(const Disconnecting());
       tooltip = "$tooltip - ${connection.present(t)}";
     }
-    if (Platform.isMacOS) {
-      windowManager.setBadgeLabel("${delay}ms");
-    }
     if (!Platform.isLinux) {
       trayManager.setToolTip(tooltip).catchError((_) {});
     }
