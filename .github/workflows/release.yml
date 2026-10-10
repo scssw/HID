@@ -9,9 +9,9 @@ on:
   workflow_dispatch:
     inputs:
       tag_name:
-        description: 'Release Tag Name (e.g. v3.0.16)'
+        description: 'Release Tag Name (e.g. v3.0.17)'
         required: false
-        default: 'v3.0.16'
+        default: 'v3.0.17'
       build_all:
         description: 'Build all platforms (Windows, Android) in addition to macOS'
         required: false
@@ -295,11 +295,11 @@ jobs:
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             TAG="${{ inputs.tag_name }}"
-            [ -z "$TAG" ] && TAG="v3.0.16"
+            [ -z "$TAG" ] && TAG="v3.0.17"
           elif [[ "${{ github.ref }}" == refs/tags/* ]]; then
             TAG="${GITHUB_REF#refs/tags/}"
           else
-            TAG="v3.0.16"
+            TAG="v3.0.17"
           fi
           echo "release_tag=$TAG" >> $GITHUB_OUTPUT
 
@@ -320,6 +320,10 @@ jobs:
             - **macOS**: DMG & PKG (Universal: Apple Silicon & Intel)
 
             ### What's New:
+            - **macOS Monterey (12.4 ~ 12.7.6) & Intel / Apple Silicon Universal Support**:
+              - Fixed `EXC_BAD_ACCESS 0x10` crash by removing dock tile badge in accessory mode and restoring `super.applicationDidFinishLaunching`
+              - Added interactive `MissingPrivilegeDialog` with one-click native macOS Administrator Authorization & Relaunch (`osascript with administrator privileges`) to seamlessly enable VPN (TUN) mode without manual terminal steps
+              - Specified `MACOSX_DEPLOYMENT_TARGET=10.15` and `-mmacosx-version-min=10.15` for full backward binary compatibility across macOS Monterey, Ventura, Sonoma, and Sequoia
             - **Desktop Stability & System Tray Fixes**:
               - Completely resolved desktop UI thread freeze and unclickable states
               - Fixed transparent tray icon and blank unclickable right-click context menu
