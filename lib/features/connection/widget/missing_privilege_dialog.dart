@@ -66,6 +66,7 @@ class MissingPrivilegeDialog extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final t = ref.watch(translationsProvider);
     final theme = Theme.of(context);
+    final localizations = MaterialLocalizations.of(context);
 
     String detailedExplanation = t.failure.singbox.missingPrivilegeMsg;
     if (Platform.isMacOS) {
@@ -152,7 +153,7 @@ class MissingPrivilegeDialog extends ConsumerWidget {
           onPressed: () {
             Navigator.of(context).pop();
           },
-          child: Text(t.general.cancel),
+          child: Text(localizations.cancelButtonLabel),
         ),
         TextButton(
           onPressed: () async {
