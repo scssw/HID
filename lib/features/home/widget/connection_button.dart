@@ -7,9 +7,11 @@ import 'package:hiddify/core/theme/theme_extensions.dart';
 import 'package:hiddify/core/widget/animated_text.dart';
 import 'package:hiddify/features/config_option/data/config_option_repository.dart';
 import 'package:hiddify/features/config_option/notifier/config_option_notifier.dart';
+import 'package:hiddify/features/connection/model/connection_failure.dart';
 import 'package:hiddify/features/connection/model/connection_status.dart';
 import 'package:hiddify/features/connection/notifier/connection_notifier.dart';
 import 'package:hiddify/features/connection/widget/experimental_feature_notice.dart';
+import 'package:hiddify/features/connection/widget/missing_privilege_dialog.dart';
 import 'package:hiddify/features/profile/notifier/active_profile_notifier.dart';
 import 'package:hiddify/features/proxy/active/active_proxy_notifier.dart';
 import 'package:hiddify/gen/assets.gen.dart';
@@ -37,7 +39,11 @@ class ConnectionButton extends HookConsumerWidget {
           CustomAlertDialog.fromErr(t.presentError(error)).show(context);
         }
         if (next case AsyncData(value: Disconnected(:final connectionFailure?))) {
-          CustomAlertDialog.fromErr(t.presentError(connectionFailure)).show(context);
+          if (connectionFailure is MissingPrivilege) {
+            MissingPrivilegeDialog.show(context);
+          } else {
+            CustomAlertDialog.fromErr(t.presentError(connectionFailure)).show(context);
+          }
         }
       },
     );
