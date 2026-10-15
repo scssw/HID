@@ -48,6 +48,7 @@ class _TrayWrapperState extends ConsumerState<TrayWrapper>
 
   @override
   Future<void> onTrayIconRightMouseDown() async {
-    await trayManager.popUpContextMenu();
+    // ignore: deprecated_member_use
+    await trayManager.popUpContextMenu(bringAppToFront: true);
   }
 }

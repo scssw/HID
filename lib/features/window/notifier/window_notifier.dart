@@ -2,8 +2,8 @@ import 'dart:io';
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
-import 'package:hiddify/core/localization/translations.dart';
 import 'package:hiddify/features/connection/notifier/connection_notifier.dart';
+import 'package:hiddify/features/system_tray/notifier/system_tray_notifier.dart';
 import 'package:hiddify/utils/utils.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 import 'package:tray_manager/tray_manager.dart';
@@ -52,6 +52,7 @@ class WindowNotifier extends _$WindowNotifier with AppLogger {
         loggy.warning("error aborting connection on quit", e);
       },
     );
+    SystemTrayNotifier.resetCache();
     await trayManager.destroy();
     await windowManager.destroy();
   }

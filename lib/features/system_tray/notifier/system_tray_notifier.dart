@@ -18,6 +18,16 @@ part 'system_tray_notifier.g.dart';
 
 @Riverpod(keepAlive: true)
 class SystemTrayNotifier extends _$SystemTrayNotifier with AppLogger {
+  static String? _lastIconPath;
+  static String? _lastTooltip;
+  static String? _lastMenuKey;
+
+  static void resetCache() {
+    _lastIconPath = null;
+    _lastTooltip = null;
+    _lastMenuKey = null;
+  }
+
   @override
   Future<void> build() async {
     if (!PlatformUtils.isDesktop) return;
@@ -47,67 +57,19 @@ class SystemTrayNotifier extends _$SystemTrayNotifier with AppLogger {
       tooltip = "$tooltip - ${connection.present(t)}";
     }
     if (!Platform.isLinux) {
-      trayManager.setToolTip(tooltip).catchError((_) {});
+      if (tooltip != _lastTooltip) {
+        _lastTooltip = tooltip;
+        trayManager.setToolTip(tooltip).catchError((_) {
+          _lastTooltip = null;
+        });
+      }
     }
 
-    try {
-      final menu = Menu(
-        items: [
-          MenuItem(
-            label: t.tray.dashboard,
-            onClick: (_) async {
-              await ref.read(windowNotifierProvider.notifier).open();
-            },
-          ),
-          MenuItem.separator(),
-          MenuItem.checkbox(
-            label: switch (connection) {
-              Disconnected() => t.tray.status.connect,
-              Connecting() => t.tray.status.connecting,
-              Connected() => t.tray.status.disconnect,
-              Disconnecting() => t.tray.status.disconnecting,
-            },
-            checked: false,
-            disabled: connection.isSwitching,
-            onClick: (_) async {
-              await ref.read(connectionNotifierProvider.notifier).toggleConnection();
-            },
-          ),
-          MenuItem.separator(),
-          MenuItem(
-            label: t.config.serviceMode,
-            disabled: true,
-          ),
-
-          ...ServiceMode.values.map(
-            (e) => MenuItem.checkbox(
-              checked: e == serviceMode,
-              key: e.name,
-              label: e.present(t),
-              onClick: (menuItem) async {
-                final newMode = ServiceMode.values.byName(menuItem.key!);
-                loggy.debug("switching service mode: [$newMode]");
-                await ref.read(ConfigOptions.serviceMode.notifier).update(newMode);
-              },
-            ),
-          ),
-
-          MenuItem.separator(),
-          MenuItem(
-            label: t.tray.quit,
-            onClick: (_) async {
-              return ref.read(windowNotifierProvider.notifier).quit();
-            },
-          ),
-        ],
-      );
-
-      await trayManager.setContextMenu(menu);
-    } catch (e) {
-      loggy.warning("error updating system tray menu", e);
-      // Fallback essential menu so right click never shows an empty unclickable window
+    final menuKey =
+        "${connection.runtimeType}_${connection.isSwitching}_${serviceMode.name}_${t.$meta.locale.languageTag}";
+    if (menuKey != _lastMenuKey) {
       try {
-        final fallbackMenu = Menu(
+        final menu = Menu(
           items: [
             MenuItem(
               label: t.tray.dashboard,
@@ -115,6 +77,39 @@ class SystemTrayNotifier extends _$SystemTrayNotifier with AppLogger {
                 await ref.read(windowNotifierProvider.notifier).open();
               },
             ),
+            MenuItem.separator(),
+            MenuItem.checkbox(
+              label: switch (connection) {
+                Disconnected() => t.tray.status.connect,
+                Connecting() => t.tray.status.connecting,
+                Connected() => t.tray.status.disconnect,
+                Disconnecting() => t.tray.status.disconnecting,
+              },
+              checked: false,
+              disabled: connection.isSwitching,
+              onClick: (_) async {
+                await ref.read(connectionNotifierProvider.notifier).toggleConnection();
+              },
+            ),
+            MenuItem.separator(),
+            MenuItem(
+              label: t.config.serviceMode,
+              disabled: true,
+            ),
+
+            ...ServiceMode.values.map(
+              (e) => MenuItem.checkbox(
+                checked: e == serviceMode,
+                key: e.name,
+                label: e.present(t),
+                onClick: (menuItem) async {
+                  final newMode = ServiceMode.values.byName(menuItem.key!);
+                  loggy.debug("switching service mode: [$newMode]");
+                  await ref.read(ConfigOptions.serviceMode.notifier).update(newMode);
+                },
+              ),
+            ),
+
             MenuItem.separator(),
             MenuItem(
               label: t.tray.quit,
@@ -124,8 +119,34 @@ class SystemTrayNotifier extends _$SystemTrayNotifier with AppLogger {
             ),
           ],
         );
-        await trayManager.setContextMenu(fallbackMenu);
-      } catch (_) {}
+
+        await trayManager.setContextMenu(menu);
+        _lastMenuKey = menuKey;
+      } catch (e) {
+        loggy.warning("error updating system tray menu", e);
+        _lastMenuKey = null;
+        // Fallback essential menu so right click never shows an empty unclickable window
+        try {
+          final fallbackMenu = Menu(
+            items: [
+              MenuItem(
+                label: t.tray.dashboard,
+                onClick: (_) async {
+                  await ref.read(windowNotifierProvider.notifier).open();
+                },
+              ),
+              MenuItem.separator(),
+              MenuItem(
+                label: t.tray.quit,
+                onClick: (_) async {
+                  return ref.read(windowNotifierProvider.notifier).quit();
+                },
+              ),
+            ],
+          );
+          await trayManager.setContextMenu(fallbackMenu);
+        } catch (_) {}
+      }
     }
   }
 
@@ -133,17 +154,23 @@ class SystemTrayNotifier extends _$SystemTrayNotifier with AppLogger {
     if (!PlatformUtils.isDesktop) return;
     try {
       final iconPath = _trayIconPath(status);
+      if (iconPath == _lastIconPath) return;
+      _lastIconPath = iconPath;
       trayManager.setIcon(
         iconPath,
         isTemplate: Platform.isMacOS,
-      ).catchError((_) {});
-    } catch (_) {}
+      ).catchError((_) {
+        _lastIconPath = null;
+      });
+    } catch (_) {
+      _lastIconPath = null;
+    }
   }
 
   static String _trayIconPath(ConnectionStatus status) {
+    final Brightness brightness = WidgetsBinding.instance.platformDispatcher.platformBrightness;
+    final isDarkMode = brightness == Brightness.dark;
     if (Platform.isWindows) {
-      final Brightness brightness = WidgetsBinding.instance.platformDispatcher.platformBrightness;
-      final isDarkMode = brightness == Brightness.dark;
       switch (status) {
         case Connected():
           return Assets.images.trayIconConnectedIco;
@@ -159,7 +186,6 @@ class SystemTrayNotifier extends _$SystemTrayNotifier with AppLogger {
           }
       }
     }
-    final isDarkMode = false;
     switch (status) {
       case Connected():
         return Assets.images.trayIconConnectedPng.path;
@@ -174,6 +200,5 @@ class SystemTrayNotifier extends _$SystemTrayNotifier with AppLogger {
           return Assets.images.trayIconPng.path;
         }
     }
-    // return Assets.images.trayIconPng.path;
   }
 }
