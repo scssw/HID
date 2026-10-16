@@ -223,9 +223,9 @@ func setOutbounds(options *option.Options, input *option.Options, opt *HiddifyOp
 			URL:       opt.ConnectionTestUrl,
 			Interval:  option.Duration(opt.URLTestInterval.Duration()),
 			// IdleTimeout: option.Duration(opt.URLTestIdleTimeout.Duration()),
-			Tolerance:                 1,
+			Tolerance:                 50,
 			IdleTimeout:               option.Duration(opt.URLTestInterval.Duration().Nanoseconds() * 3),
-			InterruptExistConnections: true,
+			InterruptExistConnections: false,
 		},
 	}
 	defaultSelect := urlTest.Tag
