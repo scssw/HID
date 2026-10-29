@@ -251,7 +251,20 @@ func patchHysteriaPortHopping(base option.Outbound, obj outboundMap) outboundMap
 		}
 	}
 	if mportStr == "" {
-		if v, ok := obj["mport"].(string); ok {
+		if v, ok := obj["mport"].(string); ok && v != "" {
+			mportStr = v
+		} else if v, ok := obj["ports"].(string); ok && v != "" {
+			mportStr = v
+		} else if v, ok := obj["server_ports"].(string); ok && v != "" {
+			mportStr = v
+		} else if sp, ok := obj["ports"].([]interface{}); ok && len(sp) > 0 {
+			var spList []string
+			for _, item := range sp {
+				if s, ok := item.(string); ok && s != "" {
+					spList = append(spList, s)
+				}
+			}
+			mportStr = strings.Join(spList, ",")
 			mportStr = v
 		} else if sp, ok := obj["server_ports"].([]interface{}); ok && len(sp) > 0 {
 			var spList []string

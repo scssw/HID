@@ -38,8 +38,8 @@ class DesktopHomeBody extends HookConsumerWidget {
     final isConnecting = statusValue is Connecting;
     final isConnectedOrConnecting = isConnected || isConnecting;
 
-    // Topology display state: expanded by default when connected
-    final isTopologyExpanded = useState(true);
+    // Topology display state: hidden by default
+    final isTopologyExpanded = useState(false);
 
     ref.listen(
       connectionNotifierProvider,
@@ -53,9 +53,6 @@ class DesktopHomeBody extends HookConsumerWidget {
           } else {
             CustomAlertDialog.fromErr(t.presentError(connectionFailure)).show(context);
           }
-        }
-        if (next case AsyncData(value: Connected())) {
-          isTopologyExpanded.value = true;
         }
       },
     );

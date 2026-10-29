@@ -285,6 +285,11 @@ func setOutbounds(options *option.Options, input *option.Options, opt *HiddifyOp
 			},
 			{
 				Tag:  OutboundDirectTag,
+				DirectOptions: option.DirectOutboundOptions{
+					DialerOptions: option.DialerOptions{
+						DomainStrategy: resolveDirectStrategy(opt),
+					},
+				},
 				Type: C.TypeDirect,
 			},
 			{
@@ -438,7 +443,18 @@ func setInbound(options *option.Options, opt *HiddifyOptions) {
 	)
 }
 
+func resolveDirectStrategy(opt *HiddifyOptions) option.DomainStrategy {
+	if opt.DirectDnsDomainStrategy != option.DomainStrategy(dns.DomainStrategyAsIS) {
+		return opt.DirectDnsDomainStrategy
+	}
+	if opt.IPv6Mode == option.DomainStrategy(dns.DomainStrategyUseIPv4) {
+		return option.DomainStrategy(dns.DomainStrategyUseIPv4)
+	}
+	return option.DomainStrategy(dns.DomainStrategyPreferIPv4)
+}
+
 func setDns(options *option.Options, opt *HiddifyOptions) {
+	directStrategy := resolveDirectStrategy(opt)
 	directDNSAddress := opt.DirectDnsAddress
 	remoteDNSAddress := opt.RemoteDnsAddress
 	if remoteDNSAddress == "udp://1.1.1.1" {
@@ -468,7 +484,7 @@ func setDns(options *option.Options, opt *HiddifyOptions) {
 				Tag:             DNSDirectTag,
 				Address:         directDNSAddress,
 				AddressResolver: DNSLocalTag,
-				Strategy:        opt.DirectDnsDomainStrategy,
+				Strategy:        directStrategy,
 				Detour:          OutboundDirectTag,
 			},
 			{
@@ -648,6 +664,13 @@ func setRoutingOptions(options *option.Options, opt *HiddifyOptions) {
 	// 		Outbound:  OutboundMainProxyTag,
 	// 	},
 	// },	}
+
+	// Block DNS queries for type 65 (HTTPS / SVCB) records to prevent browsers
+	// from attempting QUIC / HTTP3 over UDP 443 which triggers 3-second fallback timeouts.
+	dnsRules = append(dnsRules, option.DefaultDNSRule{
+		QueryType: []option.DNSQueryType{option.DNSQueryType(65)},
+		Server:    DNSBlockTag,
+	})
 
 	if opt.BypassLAN {
 		routeRules = append(

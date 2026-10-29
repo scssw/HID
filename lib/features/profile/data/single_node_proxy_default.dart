@@ -143,12 +143,12 @@ String randomizePortHopping(String config) {
     for (final outbound in outbounds.whereType<Map<String, dynamic>>()) {
       final type = outbound['type'];
       if (type != 'hysteria2' && type != 'hysteria' && type != 'hy2' && type != 'hy') continue;
-      final mport = outbound['mport'] ?? outbound['ports'];
+      final mport = outbound['mport'] ?? outbound['ports'] ?? outbound['server_ports'];
       String? mportStr;
       if (mport is String && mport.trim().isNotEmpty) {
         mportStr = mport.trim();
-      } else if (outbound['server_ports'] is List && (outbound['server_ports'] as List).isNotEmpty) {
-        mportStr = (outbound['server_ports'] as List).map((e) => e.toString()).join(',');
+      } else if (mport is List && mport.isNotEmpty) {
+        mportStr = mport.map((e) => e.toString()).join(',');
       }
       if (mportStr != null) {
         final newPort = pickRandomPort(mportStr);
@@ -191,10 +191,30 @@ String patchMportIntoConfig(String config, String rawInput) {
 
     final mportMap = <String, String>{};
     String? fallbackMport;
+    String? currentClashName;
 
     for (final line in text.split(RegExp(r'[\r\n]+'))) {
       final trimmed = line.trim();
       if (trimmed.isEmpty) continue;
+
+      // Extract Clash-style node name if present
+      final nameMatch = RegExp(r'''^\s*-\s*name\s*:\s*["']?([^"'\r\n]+)["']?''', caseSensitive: false).firstMatch(trimmed);
+      if (nameMatch != null) {
+        currentClashName = nameMatch.group(1)?.trim();
+      }
+
+      // Check for Clash-style "ports: 20000-50000", "port: 20000-50000", or "server_ports: ..."
+      final clashMatch = RegExp(r'''(?:ports?|server_ports)\s*:\s*["']?([0-9]{1,5}[-:][0-9]{1,5}|[0-9,\s\-:]+)["']?''', caseSensitive: false).firstMatch(trimmed);
+      if (clashMatch != null) {
+        final found = clashMatch.group(1)?.trim();
+        if (found != null && found.contains(RegExp(r'[-:]'))) {
+          if (currentClashName != null && currentClashName.isNotEmpty) {
+            mportMap[currentClashName] = found;
+          }
+          fallbackMport ??= found;
+        }
+      }
+
       final lower = trimmed.toLowerCase();
       if (!lower.startsWith('hysteria2://') &&
           !lower.startsWith('hy2://') &&
@@ -202,11 +222,26 @@ String patchMportIntoConfig(String config, String rawInput) {
           !lower.startsWith('hy://')) {
         continue;
       }
-      final uri = Uri.tryParse(trimmed);
+
+      var lineToParse = trimmed;
+      String? authorityPortRange;
+      final portRangeMatch = RegExp(r':([0-9]{1,5}[-:][0-9]{1,5})(?=[/?#]|$)').firstMatch(trimmed);
+      if (portRangeMatch != null) {
+        authorityPortRange = portRangeMatch.group(1);
+        final firstPort = authorityPortRange?.split(RegExp(r'[-:]'))[0];
+        lineToParse = trimmed.replaceRange(
+          portRangeMatch.start,
+          portRangeMatch.end,
+          firstPort != null ? ':$firstPort' : ':443',
+        );
+      }
+
+      final uri = Uri.tryParse(lineToParse);
       if (uri == null) continue;
       final mport = uri.queryParameters['mport'] ??
           uri.queryParameters['ports'] ??
-          uri.queryParameters['mports'];
+          uri.queryParameters['mports'] ??
+          authorityPortRange;
       if (mport != null && mport.trim().isNotEmpty) {
         final cleanMport = mport.trim();
         final tag = uri.fragment.isNotEmpty
@@ -240,6 +275,10 @@ String patchMportIntoConfig(String config, String rawInput) {
       if (matchedMport != null && matchedMport.isNotEmpty) {
         if (outbound['mport'] == null || outbound['mport'].toString().trim().isEmpty) {
           outbound['mport'] = matchedMport;
+          changed = true;
+        }
+        if (outbound['server_ports'] == null) {
+          outbound['server_ports'] = [matchedMport];
           changed = true;
         }
         final initialPort = pickRandomPort(matchedMport);

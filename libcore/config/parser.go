@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 
@@ -145,6 +146,17 @@ func extractHysteria2HintsFromRawInput(raw string) map[string]hy2Hint {
 		if !strings.HasPrefix(lower, "hysteria2://") && !strings.HasPrefix(lower, "hy2://") {
 			continue
 		}
+		authorityMport := ""
+		rePortRange := regexp.MustCompile(`:([0-9]{1,5}[-:][0-9]{1,5})(?:[/?#]|$)`)
+		if m := rePortRange.FindStringSubmatch(line); len(m) > 1 {
+			authorityMport = m[1]
+			sep := "-"
+			if strings.Contains(authorityMport, ":") {
+				sep = ":"
+			}
+			firstPort := strings.Split(authorityMport, sep)[0]
+			line = strings.Replace(line, ":"+authorityMport, ":"+firstPort, 1)
+		}
 		u, err := url.Parse(line)
 		if err != nil {
 			continue
@@ -156,7 +168,7 @@ func extractHysteria2HintsFromRawInput(raw string) map[string]hy2Hint {
 			defaultUp := 20
 			up = &defaultUp
 		}
-		mport := strings.TrimSpace(firstNonEmpty(q.Get("mport"), q.Get("ports"), q.Get("mports")))
+		mport := strings.TrimSpace(firstNonEmpty(q.Get("mport"), q.Get("ports"), q.Get("mports"), authorityMport))
 		obfs := strings.TrimSpace(firstNonEmpty(q.Get("obfs-password"), q.Get("obfs_password"), q.Get("obfs")))
 
 		hint := hy2Hint{
@@ -274,7 +286,12 @@ func extractClashHy2Hints(content []byte) map[string]hy2Hint {
 			upMbps:       parseMbpsIntString(firstNonEmpty(toString(pm["up_mbps"]), toString(pm["upmbps"]), toString(pm["up"]))),
 			downMbps:     parseMbpsIntString(firstNonEmpty(toString(pm["down_mbps"]), toString(pm["downmbps"]), toString(pm["down"]))),
 			obfsPassword: strings.TrimSpace(toString(pm["obfs"])),
-			mport:        strings.TrimSpace(firstNonEmpty(toString(pm["mport"]), toString(pm["ports"]), toString(pm["mports"]))),
+			mport: strings.TrimSpace(firstNonEmpty(
+				toStringOrJoinedList(pm["mport"]),
+				toStringOrJoinedList(pm["ports"]),
+				toStringOrJoinedList(pm["mports"]),
+				toStringOrJoinedList(pm["server_ports"]),
+			)),
 		}
 		if hint.obfsPassword == "" {
 			hint.obfsPassword = strings.TrimSpace(toString(pm["obfs-password"]))
@@ -339,6 +356,32 @@ func toString(v any) string {
 		return strconv.FormatInt(vv, 10)
 	case float64:
 		return strconv.FormatFloat(vv, 'f', -1, 64)
+	default:
+		return ""
+	}
+}
+
+func toStringOrJoinedList(v any) string {
+	switch vv := v.(type) {
+	case string:
+		return vv
+	case int:
+		return strconv.Itoa(vv)
+	case int64:
+		return strconv.FormatInt(vv, 10)
+	case float64:
+		return strconv.FormatFloat(vv, 'f', -1, 64)
+	case []any:
+		var list []string
+		for _, item := range vv {
+			s := toStringOrJoinedList(item)
+			if s != "" {
+				list = append(list, s)
+			}
+		}
+		return strings.Join(list, ",")
+	case []string:
+		return strings.Join(vv, ",")
 	default:
 		return ""
 	}

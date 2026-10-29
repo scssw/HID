@@ -16,7 +16,7 @@ class LogsOverviewNotifier extends _$LogsOverviewNotifier with AppLogger {
   @override
   LogsOverviewState build() {
     ref.disposeDelay(const Duration(seconds: 20));
-    state = const LogsOverviewState();
+    state = const LogsOverviewState(paused: true);
     ref.onDispose(
       () {
         loggy.debug("disposing");
@@ -42,7 +42,7 @@ class LogsOverviewNotifier extends _$LogsOverviewNotifier with AppLogger {
     );
 
     _addListeners();
-    return const LogsOverviewState();
+    return const LogsOverviewState(paused: true);
   }
 
   StreamSubscription? _listener;
@@ -74,6 +74,9 @@ class LogsOverviewNotifier extends _$LogsOverviewNotifier with AppLogger {
           (a) async {
             _logs = a.reversed;
             state = state.copyWith(logs: AsyncData(await _computeLogs()));
+            if (state.paused && _listener?.isPaused == false) {
+              _listener?.pause();
+            }
           },
         );
       },

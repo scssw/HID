@@ -149,6 +149,81 @@ void main() {
       final newPort = hy2['server_port'] as int;
       expect(newPort >= 20000 && newPort <= 50000, isTrue);
     });
+    test('patchMportIntoConfig extracts port range from authority host:20000-50000', () {
+      const rawUrl = 'hysteria2://password@bw6.ssrr.today:20000-50000/?sni=bw6.ssrr.today#Bw6-UNI';
+      const config = '''
+{
+  "outbounds": [
+    {
+      "type": "hysteria2",
+      "tag": "Bw6-UNI",
+      "server": "bw6.ssrr.today",
+      "server_port": 20000
+    }
+  ]
+}
+''';
+
+      final patchedJson = patchMportIntoConfig(config, rawUrl);
+      final decoded = jsonDecode(patchedJson) as Map<String, dynamic>;
+      final hy2 = (decoded['outbounds'] as List).first as Map<String, dynamic>;
+
+      expect(hy2['mport'], '20000-50000');
+      expect(hy2['server_ports'], ['20000-50000']);
+      final newPort = hy2['server_port'] as int;
+      expect(newPort >= 20000 && newPort <= 50000, isTrue);
+    });
+
+    test('patchMportIntoConfig extracts port range from Clash configuration', () {
+      const clashRaw = '''
+proxies:
+  - name: hy2-clash
+    type: hysteria2
+    server: bw6.ssrr.today
+    ports: 20000-50000
+''';
+      const config = '''
+{
+  "outbounds": [
+    {
+      "type": "hysteria2",
+      "tag": "hy2-clash",
+      "server": "bw6.ssrr.today",
+      "server_port": 443
+    }
+  ]
+}
+''';
+
+      final patchedJson = patchMportIntoConfig(config, clashRaw);
+      final decoded = jsonDecode(patchedJson) as Map<String, dynamic>;
+      final hy2 = (decoded['outbounds'] as List).first as Map<String, dynamic>;
+
+      expect(hy2['mport'], '20000-50000');
+      final newPort = hy2['server_port'] as int;
+      expect(newPort >= 20000 && newPort <= 50000, isTrue);
+    });
+
+    test('randomizePortHopping supports server_ports list', () {
+      const config = '''
+{
+  "outbounds": [
+    {
+      "type": "hysteria2",
+      "tag": "hy2-node",
+      "server": "bw6.ssrr.today",
+      "server_port": 443,
+      "server_ports": ["20000-50000"]
+    }
+  ]
+}
+''';
+
+      final randomizedJson = randomizePortHopping(config);
+      final decoded = jsonDecode(randomizedJson) as Map<String, dynamic>;
+      final hy2 = (decoded['outbounds'] as List).first as Map<String, dynamic>;
+      final newPort = hy2['server_port'] as int;
+      expect(newPort >= 20000 && newPort <= 50000, isTrue);
+    });
   });
 }
-

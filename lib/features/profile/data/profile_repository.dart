@@ -446,7 +446,7 @@ class ProfileRepositoryImpl with ExceptionHandler, InfraLogger implements Profil
       if (rawContent != null && rawContent.isNotEmpty) {
         updatedConfig = patchMportIntoConfig(updatedConfig, rawContent);
       }
-      if (Platform.isWindows) {
+      if (Platform.isWindows || Platform.isMacOS) {
         updatedConfig = selectOnlyProxyAsDefault(updatedConfig);
       }
       if (updatedConfig != config) await file.writeAsString(updatedConfig);

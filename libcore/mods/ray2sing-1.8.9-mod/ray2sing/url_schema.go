@@ -36,7 +36,18 @@ func ParseUrl(inputURL string, defaultPort uint16) (*UrlSchema, error) {
 		return nil, err
 	}
 
-	port := toInt16(parsedURL.Port(), defaultPort)
+	rawPort := parsedURL.Port()
+	var port uint16
+	if strings.Contains(rawPort, "-") || strings.Contains(rawPort, ":") {
+		sep := "-"
+		if strings.Contains(rawPort, ":") {
+			sep = ":"
+		}
+		parts := strings.Split(rawPort, sep)
+		port = toInt16(parts[0], defaultPort)
+	} else {
+		port = toInt16(rawPort, defaultPort)
+	}
 
 	data := &UrlSchema{
 		Scheme:   parsedURL.Scheme,
@@ -60,6 +71,9 @@ func ParseUrl(inputURL string, defaultPort uint16) (*UrlSchema, error) {
 
 	for key, values := range parsedURL.Query() {
 		data.Params[strings.ReplaceAll(strings.ToLower(key), "_", "")] = strings.Join(values, ",")
+	}
+	if (strings.Contains(rawPort, "-") || strings.Contains(rawPort, ":")) && data.Params["mport"] == "" {
+		data.Params["mport"] = rawPort
 	}
 
 	return data, nil

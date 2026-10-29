@@ -11,7 +11,7 @@ class LogsOverviewState with _$LogsOverviewState {
 
   const factory LogsOverviewState({
     @Default(AsyncLoading()) AsyncValue<List<LogEntity>> logs,
-    @Default(false) bool paused,
+    @Default(true) bool paused,
     @Default("") String filter,
     LogLevel? levelFilter,
   }) = _LogsOverviewState;
