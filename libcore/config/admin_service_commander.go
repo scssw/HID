@@ -110,6 +110,10 @@ func startTunnelRequest(opt HiddifyOptions, installService bool) (bool, error) {
 		}
 		return false, err
 	}
+	if res != nil && res.Message != "OK" {
+		log.Printf("tunnel service start returned non-OK: %+v", res)
+		return false, fmt.Errorf("tunnel start failed: %s", res.Message)
+	}
 
 	return true, nil
 }

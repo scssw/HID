@@ -43,6 +43,13 @@ func getCurrentExecutableDirectory() string {
 }
 
 func StartTunnelService(goArg string) (int, string) {
+	tunnelWorkDir := filepath.Join(os.TempDir(), "hiddify-tunnel")
+	_ = os.MkdirAll(tunnelWorkDir, 0o755)
+	if coreLogFactory == nil {
+		if err := Setup(tunnelWorkDir, tunnelWorkDir, os.TempDir(), 0, true); err != nil {
+			log.Printf("Tunnel Setup error: %v", err)
+		}
+	}
 	svcConfig := &service.Config{
 		Name:        "HiddifyTunnelService",
 		DisplayName: "Hiddify Tunnel Service",

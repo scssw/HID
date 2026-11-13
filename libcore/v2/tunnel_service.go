@@ -5,23 +5,33 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"path/filepath"
 	"runtime"
 
 	pb "github.com/hiddify/hiddify-core/hiddifyrpc"
 )
 
 func (s *TunnelService) Start(ctx context.Context, in *pb.TunnelStartRequest) (*pb.TunnelResponse, error) {
+	if coreLogFactory == nil {
+		tunnelWorkDir := filepath.Join(os.TempDir(), "hiddify-tunnel")
+		_ = os.MkdirAll(tunnelWorkDir, 0o755)
+		_ = Setup(tunnelWorkDir, tunnelWorkDir, os.TempDir(), 0, true)
+	}
 	if in.ServerPort == 0 {
 		in.ServerPort = 1080
 	}
+	if in.Stack == "" {
+		in.Stack = "gvisor"
+	}
 	useFlutterBridge = false
+	cfg := makeTunnelConfig(in.Ipv6, in.ServerPort, in.StrictRoute, in.EndpointIndependentNat, in.Stack)
 	res, err := Start(&pb.StartRequest{
-		ConfigContent:          makeTunnelConfig(in.Ipv6, in.ServerPort, in.StrictRoute, in.EndpointIndependentNat, in.Stack),
+		ConfigContent:          cfg,
 		EnableOldCommandServer: false,
 		DisableMemoryLimit:     true,
 		EnableRawConfig:        true,
 	})
-	fmt.Printf("Start Result: %+v\n", res)
+	fmt.Printf("TunnelService Start Result: %+v, err=%v\n", res, err)
 	if err != nil {
 		return &pb.TunnelResponse{
 			Message: err.Error(),
