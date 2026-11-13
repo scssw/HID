@@ -274,7 +274,7 @@ jobs:
 
   publish-release:
     name: Publish GitHub Release
-    if: always() && !cancelled()
+    if: needs.build-macos.result == 'success'
     needs: [build-macos]
     runs-on: ubuntu-latest
     permissions:
