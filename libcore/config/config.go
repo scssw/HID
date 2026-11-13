@@ -357,7 +357,7 @@ func setInbound(options *option.Options, opt *HiddifyOptions) {
 	} else {
 		inboundDomainStrategy = opt.IPv6Mode
 	}
-	if opt.EnableTunService {
+	if opt.EnableTunService || (opt.EnableTun && runtime.GOOS == "darwin") {
 		ActivateTunnelService(*opt)
 	} else if opt.EnableTun {
 		tunInbound := option.Inbound{

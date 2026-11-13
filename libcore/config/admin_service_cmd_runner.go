@@ -3,6 +3,7 @@
 package config
 
 import (
+	"runtime"
 	"fmt"
 	"os"
 	"os/exec"
@@ -27,15 +28,20 @@ func ExecuteCmd(executablePath string, background bool, args ...string) (string,
 	if background {
 		quotedCmd += " > /dev/null 2>&1 &"
 	}
-	osaScript := fmt.Sprintf(`do shell script "%s" with administrator privileges`, strings.ReplaceAll(quotedCmd, `"`, `\"`))
+	osaScript := fmt.Sprintf(`do shell script "%s" with prompt "Hiddify needs administrator permission to install the VPN tunnel service. Please enter your administrator password." with administrator privileges`, strings.ReplaceAll(quotedCmd, `"`, `\"`))
 
-	commands := [][]string{
-		{"osascript", "-e", osaScript},
-		{"cocoasudo", "--prompt=Hiddify needs root for tunneling.", executablePath},
-		{"gksu", executablePath},
-		{"pkexec", executablePath},
-		{"xterm", "-e", "sudo", executablePath, strings.Join(args, " ")},
-		append([]string{"sudo"}, fullArgs...),
+	var commands [][]string
+	if runtime.GOOS == "darwin" {
+		commands = [][]string{
+			{"osascript", "-e", osaScript},
+		}
+	} else {
+		commands = [][]string{
+			{"pkexec", executablePath},
+			{"gksu", executablePath},
+			{"xterm", "-e", "sudo", executablePath, strings.Join(args, " ")},
+			append([]string{"sudo"}, fullArgs...),
+		}
 	}
 
 	var err error

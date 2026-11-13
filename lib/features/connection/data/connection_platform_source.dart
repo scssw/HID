@@ -48,9 +48,11 @@ class ConnectionPlatformSourceImpl
           });
         });
         return isElevated;
-      } else if (Platform.isLinux || Platform.isMacOS) {
+      } else if (Platform.isLinux) {
         final euid = geteuid();
         return euid == 0;
+      } else if (Platform.isMacOS) {
+        return true;
       } else {
         return true;
       }

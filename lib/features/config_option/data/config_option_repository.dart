@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:dartx/dartx.dart';
 import 'package:fpdart/fpdart.dart';
 import 'package:hiddify/core/model/optional_range.dart';
@@ -25,7 +27,13 @@ abstract class ConfigOptions {
   static final serviceMode = PreferencesNotifier.create<ServiceMode, String>(
     "service-mode",
     ServiceMode.defaultMode,
-    mapFrom: (value) => ServiceMode.choices.firstWhere((e) => e.key == value),
+    mapFrom: (value) {
+      if (value == "vpn-service") return ServiceMode.tun;
+      return ServiceMode.choices.firstWhere(
+        (e) => e.key == value,
+        orElse: () => ServiceMode.defaultMode,
+      );
+    },
     mapTo: (value) => value.key,
   );
 
@@ -499,8 +507,8 @@ abstract class ConfigOptions {
         urlTestInterval: ref.watch(urlTestInterval),
         enableClashApi: ref.watch(enableClashApi),
         clashApiPort: ref.watch(clashApiPort),
-        enableTun: mode == ServiceMode.tun,
-        enableTunService: mode == ServiceMode.tunService,
+        enableTun: mode == ServiceMode.tun && !Platform.isMacOS,
+        enableTunService: (mode == ServiceMode.tun && Platform.isMacOS) || mode == ServiceMode.tunService,
         setSystemProxy: mode == ServiceMode.systemProxy,
         bypassLan: ref.watch(bypassLan),
         allowConnectionFromLan: ref.watch(allowConnectionFromLan),

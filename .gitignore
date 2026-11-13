@@ -9,6 +9,8 @@
 .history
 .svn/
 migrate_working_dir/
+官方新版/
+.suncode/
 .github/help
 # IntelliJ related
 *.iml

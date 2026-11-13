@@ -20,20 +20,14 @@ enum ServiceMode {
 
   /// supported service mode based on platform, use this instead of [values] in UI
   static List<ServiceMode> get choices {
-    if (Platform.isWindows || Platform.isLinux) {
-      return values;
-    } else if (Platform.isMacOS) {
+    if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
       return [proxy, systemProxy, tun];
     }
     // mobile
     return [proxy, tun];
   }
 
-  bool get isExperimental => switch (this) {
-        tun => PlatformUtils.isDesktop,
-        tunService => PlatformUtils.isDesktop,
-        _ => false,
-      };
+  bool get isExperimental => false;
 
   String present(TranslationsEn t) => switch (this) {
         proxy => t.config.serviceModes.proxy,

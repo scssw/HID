@@ -25,7 +25,7 @@ const (
 var tunnelServiceRunning = false
 
 func isSupportedOS() bool {
-	return runtime.GOOS == "windows" || runtime.GOOS == "linux"
+	return runtime.GOOS == "windows" || runtime.GOOS == "linux" || runtime.GOOS == "darwin"
 }
 
 func ActivateTunnelService(opt HiddifyOptions) (bool, error) {
@@ -165,24 +165,39 @@ func runTunnelService(opt HiddifyOptions) (bool, error) {
 		fmt.Println("Shell command executed without flag:", out, err)
 	}
 	if err == nil {
-		<-time.After(1 * time.Second) // wait until service loaded completely
+		for i := 0; i < 20; i++ {
+			if isPortInUse("18020") {
+				break
+			}
+			<-time.After(250 * time.Millisecond)
+		}
 	}
 	return startTunnelRequest(opt, false)
 }
 
 func getTunnelServicePath() string {
-	var fullPath string
 	exePath, _ := os.Executable()
 	binFolder := filepath.Dir(exePath)
+	var fullPath string
 	switch runtime.GOOS {
 	case "windows":
-		fullPath = "HiddifyCli.exe"
+		fullPath = filepath.Join(binFolder, "HiddifyCli.exe")
 	case "darwin":
-		fallthrough
+		cli := filepath.Join(binFolder, "HiddifyCli")
+		if _, err := os.Stat(cli); err == nil {
+			fullPath = cli
+		} else {
+			fullPath = exePath
+		}
 	default:
-		fullPath = "HiddifyCli"
+		cli := filepath.Join(binFolder, "HiddifyCli")
+		if _, err := os.Stat(cli); err == nil {
+			fullPath = cli
+		} else {
+			fullPath = exePath
+		}
 	}
 
-	abspath, _ := filepath.Abs(filepath.Join(binFolder, fullPath))
+	abspath, _ := filepath.Abs(fullPath)
 	return abspath
 }
