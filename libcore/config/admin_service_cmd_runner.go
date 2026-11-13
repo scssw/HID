@@ -48,21 +48,25 @@ func ExecuteCmd(executablePath string, background bool, args ...string) (string,
 
 	var err error
 	var cmd *exec.Cmd
+	var lastOut []byte
 	for _, command := range commands {
 		cmd = exec.Command(command[0], command[1:]...)
 		cmd.Dir = cwd
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
 		fmt.Printf("Running command: %v\n", command)
 		if background && command[0] != "osascript" {
+			cmd.Stdout = os.Stdout
+			cmd.Stderr = os.Stderr
 			err = cmd.Start()
 		} else {
-			err = cmd.Run()
+			lastOut, err = cmd.CombinedOutput()
+			if len(lastOut) > 0 {
+				fmt.Printf("Command output: %s\n", string(lastOut))
+			}
 		}
 		if err == nil {
 			return "Ok", nil
 		}
 	}
 
-	return "", fmt.Errorf("Error executing run as root shell command")
+	return "", fmt.Errorf("Error executing run as root shell command: %v (output: %s)", err, strings.TrimSpace(string(lastOut)))
 }

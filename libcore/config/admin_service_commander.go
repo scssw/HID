@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"time"
 
 	pb "github.com/hiddify/hiddify-core/hiddifyrpc"
@@ -71,12 +72,12 @@ func startTunnelRequestWithFailover(opt HiddifyOptions, installService bool) {
 }
 
 func isPortInUse(port string) bool {
-	listener, err := net.Listen("tcp", "127.0.0.1:"+port)
+	conn, err := net.DialTimeout("tcp", "127.0.0.1:"+port, 300*time.Millisecond)
 	if err != nil {
-		return true // Port is in use
+		return false
 	}
-	defer listener.Close()
-	return false // Port is available
+	_ = conn.Close()
+	return true
 }
 
 func startTunnelRequest(opt HiddifyOptions, installService bool) (bool, error) {
@@ -89,19 +90,27 @@ func startTunnelRequest(opt HiddifyOptions, installService bool) (bool, error) {
 	conn, err := grpc.Dial("127.0.0.1:18020", grpc.WithInsecure())
 	if err != nil {
 		log.Printf("did not connect: %v", err)
+		return false, err
 	}
 	defer conn.Close()
 	c := pb.NewTunnelServiceClient(conn)
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
-	defer cancel()
-	_, _ = c.Stop(ctx, &pb.Empty{})
-	res, err := c.Start(ctx, &pb.TunnelStartRequest{
-		Ipv6:                   opt.IPv6Mode != option.DomainStrategy(dns.DomainStrategyUseIPv4),
-		ServerPort:             int32(opt.InboundOptions.MixedPort),
-		StrictRoute:            opt.InboundOptions.StrictRoute,
-		EndpointIndependentNat: true,
-		Stack:                  opt.InboundOptions.TUNStack,
-	})
+	var res *pb.TunnelResponse
+	for attempt := 0; attempt < 3; attempt++ {
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
+		_, _ = c.Stop(ctx, &pb.Empty{})
+		res, err = c.Start(ctx, &pb.TunnelStartRequest{
+			Ipv6:                   opt.IPv6Mode != option.DomainStrategy(dns.DomainStrategyUseIPv4),
+			ServerPort:             int32(opt.InboundOptions.MixedPort),
+			StrictRoute:            opt.InboundOptions.StrictRoute,
+			EndpointIndependentNat: true,
+			Stack:                  opt.InboundOptions.TUNStack,
+		})
+		cancel()
+		if err == nil {
+			break
+		}
+		<-time.After(300 * time.Millisecond)
+	}
 	if err != nil {
 		log.Printf("could not greet: %+v %+v", res, err)
 
@@ -160,23 +169,39 @@ func ExitTunnelService() (bool, error) {
 	return true, nil
 }
 
+func readTailLog(path string, maxBytes int) string {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return fmt.Sprintf("<unreadable: %v>", err)
+	}
+	s := strings.TrimSpace(string(data))
+	if len(s) > maxBytes {
+		s = "..." + s[len(s)-maxBytes:]
+	}
+	if s == "" {
+		return "<empty>"
+	}
+	return s
+}
+
 func runTunnelService(opt HiddifyOptions) (bool, error) {
 	executablePath := getTunnelServicePath()
 	fmt.Printf("Executable path is %s\n", executablePath)
-	out, err := ExecuteCmd(executablePath, false, "tunnel", "install")
-	fmt.Println("Shell command executed:", out, err)
-	if err == nil {
-		for i := 0; i < 12; i++ {
+	out, installErr := ExecuteCmd(executablePath, false, "tunnel", "install")
+	fmt.Println("Shell command executed:", out, installErr)
+	if installErr == nil {
+		for i := 0; i < 24; i++ {
 			if isPortInUse("18020") {
 				break
 			}
 			<-time.After(250 * time.Millisecond)
 		}
 	}
+	var runErr error
 	if !isPortInUse("18020") {
-		out, err = ExecuteCmd(executablePath, true, "tunnel", "run")
-		fmt.Println("Shell command executed without flag:", out, err)
-		if err == nil {
+		out, runErr = ExecuteCmd(executablePath, true, "tunnel", "run")
+		fmt.Println("Shell command executed without flag:", out, runErr)
+		if runErr == nil {
 			for i := 0; i < 20; i++ {
 				if isPortInUse("18020") {
 					break
@@ -185,7 +210,19 @@ func runTunnelService(opt HiddifyOptions) (bool, error) {
 			}
 		}
 	}
-	return startTunnelRequest(opt, false)
+	ok, err := startTunnelRequest(opt, false)
+	if err != nil {
+		return ok, fmt.Errorf(
+			"%w | cli=%s | installErr=%v | runErr=%v | installLog=%s | runLog=%s",
+			err,
+			executablePath,
+			installErr,
+			runErr,
+			readTailLog("/tmp/hiddify-tunnel-install.log", 300),
+			readTailLog("/tmp/hiddify-tunnel.log", 300),
+		)
+	}
+	return ok, nil
 }
 
 func getTunnelServicePath() string {
