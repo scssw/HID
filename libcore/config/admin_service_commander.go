@@ -157,19 +157,27 @@ func ExitTunnelService() (bool, error) {
 
 func runTunnelService(opt HiddifyOptions) (bool, error) {
 	executablePath := getTunnelServicePath()
-	fmt.Printf("Executable path is %s", executablePath)
+	fmt.Printf("Executable path is %s\n", executablePath)
 	out, err := ExecuteCmd(executablePath, false, "tunnel", "install")
 	fmt.Println("Shell command executed:", out, err)
-	if err != nil {
-		out, err = ExecuteCmd(executablePath, true, "tunnel", "run")
-		fmt.Println("Shell command executed without flag:", out, err)
-	}
 	if err == nil {
-		for i := 0; i < 20; i++ {
+		for i := 0; i < 12; i++ {
 			if isPortInUse("18020") {
 				break
 			}
 			<-time.After(250 * time.Millisecond)
+		}
+	}
+	if !isPortInUse("18020") {
+		out, err = ExecuteCmd(executablePath, true, "tunnel", "run")
+		fmt.Println("Shell command executed without flag:", out, err)
+		if err == nil {
+			for i := 0; i < 20; i++ {
+				if isPortInUse("18020") {
+					break
+				}
+				<-time.After(250 * time.Millisecond)
+			}
 		}
 	}
 	return startTunnelRequest(opt, false)

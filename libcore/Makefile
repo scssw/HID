@@ -91,14 +91,18 @@ linux-custom:
 macos-amd64:
 	mkdir -p $(BINDIR)
 	env GOOS=darwin GOARCH=amd64 CC="clang" CGO_CFLAGS="-target x86_64-apple-macos10.15" CGO_LDFLAGS="-target x86_64-apple-macos10.15" CGO_ENABLED=1 go build -trimpath -tags $(TAGS),$(IOS_ADD_TAGS) -buildmode=c-shared -o $(BINDIR)/$(LIBNAME)-amd64.dylib ./custom
+	env GOOS=darwin GOARCH=amd64 CC="clang" CGO_CFLAGS="-target x86_64-apple-macos10.15" CGO_LDFLAGS="-target x86_64-apple-macos10.15" CGO_ENABLED=1 go build -trimpath -tags $(TAGS),$(IOS_ADD_TAGS) -ldflags="-w -s" -o $(BINDIR)/$(CLINAME)-amd64 ./cli
 
 macos-arm64:
 	mkdir -p $(BINDIR)
 	env GOOS=darwin GOARCH=arm64 CC="clang" CGO_CFLAGS="-target arm64-apple-macos11.0" CGO_LDFLAGS="-target arm64-apple-macos11.0" CGO_ENABLED=1 go build -trimpath -tags $(TAGS),$(IOS_ADD_TAGS) -buildmode=c-shared -o $(BINDIR)/$(LIBNAME)-arm64.dylib ./custom
+	env GOOS=darwin GOARCH=arm64 CC="clang" CGO_CFLAGS="-target arm64-apple-macos11.0" CGO_LDFLAGS="-target arm64-apple-macos11.0" CGO_ENABLED=1 go build -trimpath -tags $(TAGS),$(IOS_ADD_TAGS) -ldflags="-w -s" -o $(BINDIR)/$(CLINAME)-arm64 ./cli
 	
 macos-universal: macos-amd64 macos-arm64 
 	lipo -create $(BINDIR)/$(LIBNAME)-amd64.dylib $(BINDIR)/$(LIBNAME)-arm64.dylib -output $(BINDIR)/$(LIBNAME).dylib
-	rm -f $(BINDIR)/$(LIBNAME)-amd64.dylib $(BINDIR)/$(LIBNAME)-arm64.dylib
+	lipo -create $(BINDIR)/$(CLINAME)-amd64 $(BINDIR)/$(CLINAME)-arm64 -output $(BINDIR)/$(CLINAME)
+	chmod +x $(BINDIR)/$(CLINAME)
+	rm -f $(BINDIR)/$(LIBNAME)-amd64.dylib $(BINDIR)/$(LIBNAME)-arm64.dylib $(BINDIR)/$(CLINAME)-amd64 $(BINDIR)/$(CLINAME)-arm64
 
 
 clean:

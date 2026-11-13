@@ -66,6 +66,9 @@ jobs:
             exit 1
           fi
 
+          echo "=== Compiling arm64 HiddifyCli ==="
+          GOOS=darwin GOARCH=arm64 go build -v -trimpath -tags "$TAGS" -ldflags="-w -s" -o bin/HiddifyCli ./cli 2>&1 || true
+
           echo "=== Compiling amd64 libcore.dylib ==="
           printf '#!/bin/sh\nexec clang -arch x86_64 -mmacosx-version-min=10.15 "$@"\n' > /tmp/x86_64-clang
           chmod +x /tmp/x86_64-clang
@@ -79,8 +82,21 @@ jobs:
             echo "amd64 cross-compile failed, keeping native arm64"
           fi
 
+          echo "=== Compiling amd64 HiddifyCli ==="
+          if CC=/tmp/x86_64-clang GOOS=darwin GOARCH=amd64 go build -v -trimpath -tags "$TAGS" -ldflags="-w -s" -o bin/HiddifyCli-amd64 ./cli 2>&1; then
+            if [ -f bin/HiddifyCli ] && [ -f bin/HiddifyCli-amd64 ]; then
+              lipo -create bin/HiddifyCli bin/HiddifyCli-amd64 -output bin/HiddifyCli-universal || true
+              if [ -f bin/HiddifyCli-universal ]; then
+                mv bin/HiddifyCli-universal bin/HiddifyCli
+                rm -f bin/HiddifyCli-amd64
+              fi
+            fi
+          fi
+          chmod +x bin/HiddifyCli || true
+
           cd ..
           ls -lh libcore/bin/libcore.dylib
+          ls -lh libcore/bin/HiddifyCli || true
 
       - name: Prepare Flutter code generation & translations
         run: |

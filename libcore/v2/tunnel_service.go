@@ -94,6 +94,7 @@ func makeTunnelConfig(Ipv6 bool, ServerPort int32, StrictRoute bool, EndpointInd
 		  }
 		],
 		"route": {
+		  "final": "socks-out",
 		  "auto_detect_interface": true,
 		  "rules": [
 			{
@@ -112,6 +113,7 @@ func makeTunnelConfig(Ipv6 bool, ServerPort int32, StrictRoute bool, EndpointInd
 			  "process_name": [
 				"Hiddify.exe",
 				"Hiddify",
+				"HiddifyNext",
 				"HiddifyCli",
 				"HiddifyCli.exe"
 			  ],
