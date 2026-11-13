@@ -30,12 +30,13 @@ func isSupportedOS() bool {
 
 func ActivateTunnelService(opt HiddifyOptions) (bool, error) {
 	tunnelServiceRunning = true
-	// if !isSupportedOS() {
-	// 	return false, E.New("Unsupported OS: " + runtime.GOOS)
-	// }
-
-	go startTunnelRequestWithFailover(opt, true)
-	return true, nil
+	res, err := startTunnelRequest(opt, true)
+	fmt.Printf("Start Tunnel Result: %v, err=%v\n", res, err)
+	if err != nil {
+		tunnelServiceRunning = false
+		return false, err
+	}
+	return res, nil
 }
 
 func DeactivateTunnelServiceForce() (bool, error) {

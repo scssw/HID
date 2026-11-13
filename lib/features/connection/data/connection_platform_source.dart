@@ -52,9 +52,9 @@ class ConnectionPlatformSourceImpl
         final euid = geteuid();
         return euid == 0;
       } else if (Platform.isMacOS) {
-        final euid = geteuid();
-        if (euid == 0) return true;
-        return File('/Library/LaunchDaemons/HiddifyTunnelService.plist').existsSync();
+        // On macOS, Hiddify runs without root and activates the privileged
+        // HiddifyCli tunnel service via osascript / LaunchDaemon on demand.
+        return true;
       } else {
         return true;
       }

@@ -27,6 +27,8 @@ func ExecuteCmd(executablePath string, background bool, args ...string) (string,
 	}
 	if background {
 		quotedCmd += " > /tmp/hiddify-tunnel.log 2>&1 < /dev/null &"
+	} else {
+		quotedCmd += " > /tmp/hiddify-tunnel-install.log 2>&1"
 	}
 	osaScript := fmt.Sprintf(`do shell script "%s" with prompt "Hiddify needs administrator permission to install the VPN tunnel service. Please enter your administrator password." with administrator privileges`, strings.ReplaceAll(quotedCmd, `"`, `\"`))
 

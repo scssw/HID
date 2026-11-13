@@ -92,7 +92,9 @@ func BuildConfig(opt HiddifyOptions, input option.Options) (*option.Options, err
 
 	setClashAPI(&options, &opt)
 	setLog(&options, &opt)
-	setInbound(&options, &opt)
+	if err := setInbound(&options, &opt); err != nil {
+		return nil, err
+	}
 	setDns(&options, &opt)
 	setRoutingOptions(&options, &opt)
 	setFakeDns(&options, &opt)
@@ -350,7 +352,7 @@ func setLog(options *option.Options, opt *HiddifyOptions) {
 	}
 }
 
-func setInbound(options *option.Options, opt *HiddifyOptions) {
+func setInbound(options *option.Options, opt *HiddifyOptions) error {
 	var inboundDomainStrategy option.DomainStrategy
 	if !opt.ResolveDestination {
 		inboundDomainStrategy = option.DomainStrategy(dns.DomainStrategyAsIS)
@@ -359,7 +361,7 @@ func setInbound(options *option.Options, opt *HiddifyOptions) {
 	}
 	if opt.EnableTunService {
 		if ok, err := ActivateTunnelService(*opt); !ok || err != nil {
-			fmt.Printf("ActivateTunnelService failed: ok=%v, err=%v\n", ok, err)
+			return fmt.Errorf("activate tunnel service failed (ok=%v): %w", ok, err)
 		}
 	} else if opt.EnableTun {
 		tunInbound := option.Inbound{
@@ -443,6 +445,7 @@ func setInbound(options *option.Options, opt *HiddifyOptions) {
 			},
 		},
 	)
+	return nil
 }
 
 func resolveDirectStrategy(opt *HiddifyOptions) option.DomainStrategy {
