@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"os"
 	"time"
 
 	"github.com/hiddify/hiddify-core/config"
@@ -34,7 +35,10 @@ var commandService = &cobra.Command{
 			config.ExitTunnelService()
 		default:
 			code, out := v2.StartTunnelService(arg)
-			fmt.Printf("exitCode:%d msg=%s", code, out)
+			fmt.Printf("exitCode:%d msg=%s\n", code, out)
+			if code != 0 {
+				os.Exit(code)
+			}
 		}
 	},
 }

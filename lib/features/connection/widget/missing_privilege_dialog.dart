@@ -34,6 +34,20 @@ class MissingPrivilegeDialog extends ConsumerWidget {
     return execPath;
   }
 
+  static Future<bool> _isPortOpen(
+    String host,
+    int port, {
+    Duration timeout = const Duration(milliseconds: 300),
+  }) async {
+    try {
+      final socket = await Socket.connect(host, port, timeout: timeout);
+      socket.destroy();
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
   static Future<bool> relaunchAsAdmin() async {
     try {
       final execPath = Platform.resolvedExecutable;
@@ -42,7 +56,16 @@ class MissingPrivilegeDialog extends ConsumerWidget {
         final script =
             'do shell script "\'$cliPath\' tunnel install" with prompt "Hiddify 需要管理员权限安装并运行 VPN 隧道服务，请输入您的 macOS 登录密码：" with administrator privileges';
         final res = await Process.run('osascript', ['-e', script]);
-        return res.exitCode == 0;
+        if (res.exitCode != 0) {
+          return false;
+        }
+        for (var i = 0; i < 20; i++) {
+          if (await _isPortOpen('127.0.0.1', 18020)) {
+            return true;
+          }
+          await Future.delayed(const Duration(milliseconds: 150));
+        }
+        return false;
       } else if (Platform.isWindows) {
         await Process.run('powershell', [
           '-NoProfile',
@@ -194,7 +217,7 @@ class MissingPrivilegeDialog extends ConsumerWidget {
               } else if (!elevated) {
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(
-                    content: Text("授权未完成或已取消，可尝试使用终端命令启动"),
+                    content: Text("授权未完成或服务启动失败，可尝试使用终端命令启动"),
                     duration: Duration(seconds: 3),
                   ),
                 );

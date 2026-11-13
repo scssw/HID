@@ -3,11 +3,11 @@
 package config
 
 import (
-	"runtime"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 )
 
@@ -26,7 +26,7 @@ func ExecuteCmd(executablePath string, background bool, args ...string) (string,
 		quotedCmd += fmt.Sprintf(" '%s'", strings.ReplaceAll(a, "'", "'\\''"))
 	}
 	if background {
-		quotedCmd += " > /tmp/hiddify-tunnel.log 2>&1 < /dev/null &"
+		quotedCmd = "nohup " + quotedCmd + " > /tmp/hiddify-tunnel.log 2>&1 < /dev/null &"
 	} else {
 		quotedCmd += " > /tmp/hiddify-tunnel-install.log 2>&1"
 	}
