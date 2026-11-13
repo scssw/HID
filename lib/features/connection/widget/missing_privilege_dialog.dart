@@ -5,7 +5,6 @@ import 'package:flutter/services.dart';
 import 'package:hiddify/core/localization/translations.dart';
 import 'package:hiddify/features/config_option/data/config_option_repository.dart';
 import 'package:hiddify/singbox/model/singbox_config_enum.dart';
-import 'package:hiddify/utils/utils.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 class MissingPrivilegeDialog extends ConsumerWidget {
@@ -24,11 +23,13 @@ class MissingPrivilegeDialog extends ConsumerWidget {
       final execPath = Platform.resolvedExecutable;
       if (Platform.isMacOS) {
         final homeDir = Platform.environment['HOME'] ?? '';
+        final escapedExec = execPath.replaceAll('"', r'\"');
+        final escapedHome = homeDir.replaceAll('"', r'\"');
         final cmd = homeDir.isNotEmpty
-            ? 'HOME="$homeDir" "$execPath"'
-            : '"$execPath"';
+            ? 'export HOME=\\"$escapedHome\\"; nohup \\"$escapedExec\\" >/dev/null 2>&1 &'
+            : 'nohup \\"$escapedExec\\" >/dev/null 2>&1 &';
         final script =
-            'do shell script "$cmd > /dev/null 2>&1 &" with administrator privileges';
+            'do shell script "$cmd" with administrator privileges';
         final res = await Process.run('osascript', ['-e', script]);
         if (res.exitCode == 0) {
           exit(0);

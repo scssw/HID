@@ -8,7 +8,6 @@ import (
 	"sync"
 
 	"github.com/sagernet/sing-box/adapter"
-	
 	"github.com/sagernet/sing-box/common/dialer"
 	C "github.com/sagernet/sing-box/constant"
 	"github.com/sagernet/sing-box/log"
@@ -24,8 +23,6 @@ import (
 	N "github.com/sagernet/sing/common/network"
 )
 
-
-
 var _ adapter.Outbound = (*Outbound)(nil)
 
 type Outbound struct {
@@ -37,6 +34,49 @@ type Outbound struct {
 	protocolMu   sync.Mutex
 	protocolData any
 	obfsData     any
+}
+
+type ssrSafeConn struct {
+	*shadowsocksr.SSTCPConn
+	writeMu sync.Mutex
+	readMu  sync.Mutex
+}
+
+func (c *ssrSafeConn) Write(b []byte) (int, error) {
+	if len(b) == 0 {
+		return 0, nil
+	}
+	c.writeMu.Lock()
+	defer c.writeMu.Unlock()
+
+	// Split writes into safe chunks (<= 2048 bytes) so that after protocol + obfs overhead,
+	// individual frames never exceed github.com/v2rayA/shadowsocksR's internal 4096-byte
+	// leakybuf Read/Write buffer limit or 8192-byte auth packet limit.
+	const maxChunkSize = 2048
+	total := 0
+	for len(b) > 0 {
+		chunk := b
+		if len(chunk) > maxChunkSize {
+			chunk = chunk[:maxChunkSize]
+		}
+		n, err := c.SSTCPConn.Write(chunk)
+		total += n
+		if err != nil {
+			return total, err
+		}
+		b = b[len(chunk):]
+	}
+	return total, nil
+}
+
+func (c *ssrSafeConn) Read(b []byte) (int, error) {
+	c.readMu.Lock()
+	defer c.readMu.Unlock()
+	return c.SSTCPConn.Read(b)
+}
+
+func (c *ssrSafeConn) Upstream() any {
+	return c.SSTCPConn.Conn
 }
 
 func NewShadowsocksR(ctx context.Context, router adapter.Router, logger log.ContextLogger, tag string, options option.ShadowsocksROutboundOptions) (adapter.Outbound, error) {
@@ -59,10 +99,10 @@ func NewShadowsocksR(ctx context.Context, router adapter.Router, logger log.Cont
 	networks := []string{N.NetworkTCP}
 	return &Outbound{
 		myOutboundAdapter: myOutboundAdapter{protocol: C.TypeShadowsocksR, network: networks, router: router, logger: logger, tag: tag, dependencies: withDialerDependency(options.DialerOptions)},
-		logger:     logger,
-		dialer:     outboundDialer,
-		serverAddr: options.ServerOptions.Build(),
-		options:    options,
+		logger:            logger,
+		dialer:            outboundDialer,
+		serverAddr:        options.ServerOptions.Build(),
+		options:           options,
 	}, nil
 }
 
@@ -112,6 +152,8 @@ func (h *Outbound) DialContext(ctx context.Context, network string, destination 
 		Port:   serverPort,
 		TcpMss: 1460,
 		Param:  h.options.ObfsParam,
+		Key:    streamCipher.Key(),
+		IV:     streamCipher.IV(),
 	}
 	ssrconn.IObfs.SetServerInfo(obfsServerInfo)
 
@@ -126,6 +168,8 @@ func (h *Outbound) DialContext(ctx context.Context, network string, destination 
 		Port:   serverPort,
 		TcpMss: 1460,
 		Param:  h.options.ProtocolParam,
+		Key:    streamCipher.Key(),
+		IV:     streamCipher.IV(),
 	}
 	ssrconn.IProtocol.SetServerInfo(protocolServerInfo)
 
@@ -139,24 +183,23 @@ func (h *Outbound) DialContext(ctx context.Context, network string, destination 
 		h.protocolData = ssrconn.IProtocol.GetData()
 	}
 	ssrconn.IProtocol.SetData(h.protocolData)
-
-	_, err = ssrconn.Write(target)
 	h.protocolMu.Unlock()
 
-	if err != nil {
+	safeConn := &ssrSafeConn{
+		SSTCPConn: ssrconn,
+	}
+
+	if _, err = safeConn.Write(target); err != nil {
 		ssrconn.Close()
 		return nil, err
 	}
 
-	return ssrconn, nil
+	return safeConn, nil
 }
 
 func (h *Outbound) ListenPacket(ctx context.Context, destination M.Socksaddr) (net.PacketConn, error) {
 	return nil, E.New("UDP is not supported by ShadowsocksR")
 }
-
-
-
 
 func (h *Outbound) NewConnection(ctx context.Context, conn net.Conn, metadata adapter.InboundContext) error {
 	return NewConnection(ctx, h, conn, metadata)
@@ -165,6 +208,3 @@ func (h *Outbound) NewConnection(ctx context.Context, conn net.Conn, metadata ad
 func (h *Outbound) NewPacketConnection(ctx context.Context, conn N.PacketConn, metadata adapter.InboundContext) error {
 	return NewPacketConnection(ctx, h, conn, metadata)
 }
-
-
-

@@ -9,9 +9,9 @@ on:
   workflow_dispatch:
     inputs:
       tag_name:
-        description: 'Release Tag Name (e.g. v3.0.18)'
+        description: 'Release Tag Name (e.g. v3.0.19)'
         required: false
-        default: 'v3.0.18'
+        default: 'v3.0.19'
       build_all:
         description: 'Build all platforms (Windows, Android) in addition to macOS'
         required: false
@@ -295,11 +295,11 @@ jobs:
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             TAG="${{ inputs.tag_name }}"
-            [ -z "$TAG" ] && TAG="v3.0.18"
+            [ -z "$TAG" ] && TAG="v3.0.19"
           elif [[ "${{ github.ref }}" == refs/tags/* ]]; then
             TAG="${GITHUB_REF#refs/tags/}"
           else
-            TAG="v3.0.18"
+            TAG="v3.0.19"
           fi
           echo "release_tag=$TAG" >> $GITHUB_OUTPUT
 
@@ -320,6 +320,11 @@ jobs:
             - **macOS**: DMG & PKG (Universal: Apple Silicon & Intel)
 
             ### What's New:
+            - **macOS VPN (TUN Mode) Privilege & Reconnect Fix**:
+              - Fixed `initialize inbound/tun[tun-in]: configure tun interface: Connect: operation not permitted` error when switching to VPN (Experimental) mode while already connected
+              - Added pre-flight privilege check in `reconnect()` and immediate `MissingPrivilegeDialog` prompt when selecting VPN mode in Quick Settings
+              - Mapped `operation not permitted` / `permission denied` TUN interface errors directly to interactive administrator privilege authorization
+              - Enhanced macOS `osascript` privilege elevation (`nohup` & `HOME` environment preservation) and native `libcore` tunnel service elevation
             - **macOS Monterey (12.4 ~ 12.7.6) & Intel / Apple Silicon Universal Support**:
               - Fixed `EXC_BAD_ACCESS 0x10` crash by removing dock tile badge in accessory mode and restoring `super.applicationDidFinishLaunching`
               - Added interactive `MissingPrivilegeDialog` with one-click native macOS Administrator Authorization & Relaunch (`osascript with administrator privileges`) to seamlessly enable VPN (TUN) mode without manual terminal steps

@@ -45,10 +45,18 @@ class DesktopHomeBody extends HookConsumerWidget {
       connectionNotifierProvider,
       (_, next) {
         if (next case AsyncError(:final error)) {
-          CustomAlertDialog.fromErr(t.presentError(error)).show(context);
+          if (error is MissingPrivilege ||
+              error.toString().toLowerCase().contains("operation not permitted") ||
+              error.toString().toLowerCase().contains("permission denied")) {
+            MissingPrivilegeDialog.show(context);
+          } else {
+            CustomAlertDialog.fromErr(t.presentError(error)).show(context);
+          }
         }
         if (next case AsyncData(value: Disconnected(:final connectionFailure?))) {
-          if (connectionFailure is MissingPrivilege) {
+          if (connectionFailure is MissingPrivilege ||
+              connectionFailure.toString().toLowerCase().contains("operation not permitted") ||
+              connectionFailure.toString().toLowerCase().contains("permission denied")) {
             MissingPrivilegeDialog.show(context);
           } else {
             CustomAlertDialog.fromErr(t.presentError(connectionFailure)).show(context);

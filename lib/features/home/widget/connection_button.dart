@@ -36,10 +36,18 @@ class ConnectionButton extends HookConsumerWidget {
       connectionNotifierProvider,
       (_, next) {
         if (next case AsyncError(:final error)) {
-          CustomAlertDialog.fromErr(t.presentError(error)).show(context);
+          if (error is MissingPrivilege ||
+              error.toString().toLowerCase().contains("operation not permitted") ||
+              error.toString().toLowerCase().contains("permission denied")) {
+            MissingPrivilegeDialog.show(context);
+          } else {
+            CustomAlertDialog.fromErr(t.presentError(error)).show(context);
+          }
         }
         if (next case AsyncData(value: Disconnected(:final connectionFailure?))) {
-          if (connectionFailure is MissingPrivilege) {
+          if (connectionFailure is MissingPrivilege ||
+              connectionFailure.toString().toLowerCase().contains("operation not permitted") ||
+              connectionFailure.toString().toLowerCase().contains("permission denied")) {
             MissingPrivilegeDialog.show(context);
           } else {
             CustomAlertDialog.fromErr(t.presentError(connectionFailure)).show(context);
@@ -95,9 +103,6 @@ class ConnectionButton extends HookConsumerWidget {
         AsyncData(value: Connected()) when requiresReconnect == true => Assets.images.disconnectNorouz,
         AsyncData(value: Connected()) => Assets.images.connectNorouz,
         AsyncData(value: _) => Assets.images.disconnectNorouz,
-        _ => Assets.images.disconnectNorouz,
-        AsyncData(value: Disconnected()) || AsyncError() => Assets.images.disconnectNorouz,
-        AsyncData(value: Connected()) => Assets.images.connectNorouz,
         _ => Assets.images.disconnectNorouz,
       },
       useImage: today.day >= 19 && today.day <= 23 && today.month == 3,

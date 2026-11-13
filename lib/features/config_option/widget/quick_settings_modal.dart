@@ -6,7 +6,10 @@ import 'package:hiddify/core/router/router.dart';
 import 'package:hiddify/features/config_option/data/config_option_repository.dart';
 import 'package:hiddify/features/config_option/notifier/warp_option_notifier.dart';
 import 'package:hiddify/features/config_option/overview/config_options_page.dart';
+import 'package:hiddify/features/connection/data/connection_platform_source.dart';
+import 'package:hiddify/features/connection/widget/missing_privilege_dialog.dart';
 import 'package:hiddify/singbox/model/singbox_config_enum.dart';
+import 'package:hiddify/utils/utils.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 class QuickSettingsModal extends HookConsumerWidget {
@@ -37,7 +40,20 @@ class QuickSettingsModal extends HookConsumerWidget {
                   )
                   .toList(),
               selected: {ref.watch(ConfigOptions.serviceMode)},
-              onSelectionChanged: (newSet) => ref.read(ConfigOptions.serviceMode.notifier).update(newSet.first),
+              onSelectionChanged: (newSet) async {
+                final newMode = newSet.first;
+                if (PlatformUtils.isDesktop && newMode == ServiceMode.tun) {
+                  final hasPrivilege = await ConnectionPlatformSourceImpl().checkPrivilege();
+                  if (!hasPrivilege) {
+                    await ref.read(ConfigOptions.serviceMode.notifier).update(newMode);
+                    if (context.mounted) {
+                      await MissingPrivilegeDialog.show(context);
+                    }
+                    return;
+                  }
+                }
+                await ref.read(ConfigOptions.serviceMode.notifier).update(newMode);
+              },
             ),
           ),
           const Gap(8),

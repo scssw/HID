@@ -64,7 +64,14 @@ class ConnectionRepositoryImpl with ExceptionHandler, InfraLogger implements Con
                   SingboxAlert.emptyConfiguration => ConnectionFailure.invalidConfig(message),
                   SingboxAlert.requestNotificationPermission => ConnectionFailure.missingNotificationPermission(message),
                   SingboxAlert.requestVPNPermission => ConnectionFailure.missingVpnPermission(message),
-                  SingboxAlert.startCommandServer || SingboxAlert.createService || SingboxAlert.startService => ConnectionFailure.unexpected(message),
+                  SingboxAlert.startCommandServer || SingboxAlert.createService || SingboxAlert.startService =>
+                    (message != null &&
+                            (message.toLowerCase().contains("operation not permitted") ||
+                                message.toLowerCase().contains("permission denied") ||
+                                message.toLowerCase().contains("access is denied") ||
+                                message.toLowerCase().contains("configure tun interface")))
+                        ? const ConnectionFailure.missingPrivilege()
+                        : ConnectionFailure.unexpected(message),
                 },
               ),
             SingboxStopped() => const Disconnected(),
@@ -193,7 +200,15 @@ class ConnectionRepositoryImpl with ExceptionHandler, InfraLogger implements Con
                 profileName,
                 disableMemoryLimit,
               )
-              .mapLeft(UnexpectedConnectionFailure.new),
+              .mapLeft((err) {
+                final errLower = err.toLowerCase();
+                if (errLower.contains("operation not permitted") ||
+                    errLower.contains("permission denied") ||
+                    errLower.contains("configure tun interface")) {
+                  return const MissingPrivilege();
+                }
+                return UnexpectedConnectionFailure(err);
+              }),
         );
       },
     ).handleExceptions(UnexpectedConnectionFailure.new);
@@ -238,6 +253,18 @@ class ConnectionRepositoryImpl with ExceptionHandler, InfraLogger implements Con
           "config options: ${options.format()}\nMemory Limit: ${!disableMemoryLimit}",
         );
 
+        await $(
+          TaskEither(() async {
+            if (options.enableTun) {
+              final hasPrivilege = await platformSource.checkPrivilege();
+              if (!hasPrivilege) {
+                loggy.warning("missing privileges for tun mode on reconnect");
+                return left(const MissingPrivilege());
+              }
+            }
+            return right(unit);
+          }),
+        );
         await $(applyConfigOption(options, testUrl));
         return await $(
           singbox
@@ -246,7 +273,15 @@ class ConnectionRepositoryImpl with ExceptionHandler, InfraLogger implements Con
                 profileName,
                 disableMemoryLimit,
               )
-              .mapLeft(UnexpectedConnectionFailure.new),
+              .mapLeft((err) {
+                final errLower = err.toLowerCase();
+                if (errLower.contains("operation not permitted") ||
+                    errLower.contains("permission denied") ||
+                    errLower.contains("configure tun interface")) {
+                  return const MissingPrivilege();
+                }
+                return UnexpectedConnectionFailure(err);
+              }),
         );
       },
     ).handleExceptions(UnexpectedConnectionFailure.new);

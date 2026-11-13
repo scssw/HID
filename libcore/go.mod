@@ -31,6 +31,7 @@ require (
 
 require (
 	github.com/DataDog/zstd v1.4.1 // indirect
+	github.com/akavel/rsrc v0.10.2 // indirect
 	github.com/cenkalti/backoff/v4 v4.1.1 // indirect
 	github.com/cespare/xxhash v1.1.0 // indirect
 	github.com/cosmos/gorocksdb v1.2.0 // indirect
