@@ -6,6 +6,7 @@ import 'package:hiddify/core/localization/translations.dart';
 import 'package:hiddify/features/config_option/data/config_option_repository.dart';
 import 'package:hiddify/singbox/model/singbox_config_enum.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:path/path.dart' as p;
 
 class MissingPrivilegeDialog extends ConsumerWidget {
   const MissingPrivilegeDialog({super.key});
@@ -18,12 +19,28 @@ class MissingPrivilegeDialog extends ConsumerWidget {
     );
   }
 
+  static String _resolveMacTunnelBinary() {
+    final execPath = Platform.resolvedExecutable;
+    final binDir = p.dirname(execPath);
+    final candidates = [
+      p.join(binDir, 'HiddifyCli'),
+      p.normalize(p.join(binDir, '..', 'Frameworks', 'HiddifyCli')),
+    ];
+    for (final c in candidates) {
+      if (File(c).existsSync()) {
+        return c;
+      }
+    }
+    return execPath;
+  }
+
   static Future<bool> relaunchAsAdmin() async {
     try {
       final execPath = Platform.resolvedExecutable;
       if (Platform.isMacOS) {
+        final cliPath = _resolveMacTunnelBinary();
         final script =
-            'do shell script "\'$execPath\' tunnel install" with prompt "Hiddify 需要管理员权限安装并运行 VPN 隧道服务，请输入您的 macOS 登录密码：" with administrator privileges';
+            'do shell script "\'$cliPath\' tunnel install" with prompt "Hiddify 需要管理员权限安装并运行 VPN 隧道服务，请输入您的 macOS 登录密码：" with administrator privileges';
         final res = await Process.run('osascript', ['-e', script]);
         return res.exitCode == 0;
       } else if (Platform.isWindows) {
@@ -51,7 +68,7 @@ class MissingPrivilegeDialog extends ConsumerWidget {
     if (Platform.isWindows) {
       return 'powershell -Command "Start-Process \'$execPath\' -Verb RunAs"';
     } else if (Platform.isMacOS) {
-      return 'sudo "$execPath" tunnel install';
+      return 'sudo "${_resolveMacTunnelBinary()}" tunnel install';
     }
     return 'sudo "$execPath"';
   }
@@ -61,15 +78,15 @@ class MissingPrivilegeDialog extends ConsumerWidget {
     final t = ref.watch(translationsProvider);
     final theme = Theme.of(context);
     final localizations = MaterialLocalizations.of(context);
-    final execPath = Platform.resolvedExecutable;
 
     String detailedExplanation = t.failure.singbox.missingPrivilegeMsg;
     if (Platform.isMacOS) {
+      final cliPath = _resolveMacTunnelBinary();
       detailedExplanation =
           "macOS 系统机制说明：\n\n"
           "1. VPN (TUN) 模式需要创建虚拟网卡 (utun) 并接管核心路由，这属于系统底层网络接口，需要 macOS 管理员权限安装后台网络隧道服务。\n\n"
           "2. 点击下方【管理员授权】可直接输入密码授权安装并启动 VPN 隧道服务；授权完成后无需重启，直接点击连接即可。\n\n"
-          "您也可以使用终端命令运行：\nsudo \"$execPath\" tunnel install";
+          "您也可以使用终端命令运行：\nsudo \"$cliPath\" tunnel install";
     } else if (Platform.isLinux) {
       detailedExplanation =
           "VPN (TUN) 模式需要创建虚拟网卡和核心路由表，需要 Root 权限。\n\n"
