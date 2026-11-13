@@ -88,6 +88,13 @@ jobs:
           dart run build_runner build --delete-conflicting-outputs
           dart run slang
 
+      - name: Pre-install & patch Pods for Xcode 16.4+
+        run: |
+          cd macos
+          pod install || true
+          find Pods -type f \( -name "*.hpp" -o -name "*.h" -o -name "*.cpp" \) -exec sed -i '' -E 's/std::vector<const ([^>]+)>/std::vector<\1>/g' {} + 2>/dev/null || true
+          cd ..
+
       - name: Build macOS DMG
         run: |
           export PATH="$PATH:$HOME/.pub-cache/bin"
