@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"runtime"
 
 	pb "github.com/hiddify/hiddify-core/hiddifyrpc"
 )
@@ -38,16 +39,34 @@ func makeTunnelConfig(Ipv6 bool, ServerPort int32, StrictRoute bool, EndpointInd
 	} else {
 		ipv6 = ""
 	}
+	var interfaceName string
+	if runtime.GOOS == "windows" {
+		interfaceName = `"interface_name": "HiddifyTunnel",`
+	} else {
+		// on darwin (macOS) and linux, omit interface_name so the OS kernel
+		// automatically allocates a valid tun/utun interface (e.g. utun3 on macOS).
+		interfaceName = ""
+	}
+
 	base := `{
 		"log":{
 			"level": "warn"
+		},
+		"dns": {
+		  "servers": [
+			{
+			  "tag": "dns-local",
+			  "address": "udp://127.0.0.1:16450",
+			  "detour": "direct-out"
+			}
+		  ]
 		},
 		"inbounds": [
 		  {
 			"type": "tun",
 			"tag": "tun-in",
-			"interface_name": "HiddifyTunnel",
-			"inet4_address": "172.19.0.1/30",
+			` + interfaceName + `
+			"inet4_address": "172.19.0.1/28",
 			` + ipv6 + `
 			"auto_route": true,
 			"strict_route": ` + fmt.Sprintf("%t", StrictRoute) + `,
@@ -66,20 +85,37 @@ func makeTunnelConfig(Ipv6 bool, ServerPort int32, StrictRoute bool, EndpointInd
 			"version": "5"
 		  },
 		  {
+			"type": "dns",
+			"tag": "dns-out"
+		  },
+		  {
 			"type": "direct",
 			"tag": "direct-out"
 		  }
 		],
 		"route": {
+		  "auto_detect_interface": true,
 		  "rules": [
 			{
-				"process_name":[
-					"Hiddify.exe",
-					"Hiddify",
-					"HiddifyCli",
-					"HiddifyCli.exe"
-					],
-				"outbound": "direct-out"
+			  "protocol": "dns",
+			  "outbound": "dns-out"
+			},
+			{
+			  "port": 53,
+			  "outbound": "dns-out"
+			},
+			{
+			  "ip_is_private": true,
+			  "outbound": "direct-out"
+			},
+			{
+			  "process_name": [
+				"Hiddify.exe",
+				"Hiddify",
+				"HiddifyCli",
+				"HiddifyCli.exe"
+			  ],
+			  "outbound": "direct-out"
 			}
 		  ]
 		}

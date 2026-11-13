@@ -17,6 +17,7 @@ import 'package:hiddify/singbox/model/singbox_config_option.dart';
 import 'package:hiddify/singbox/model/singbox_rule.dart';
 import 'package:hiddify/utils/utils.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:posix/posix.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 abstract class ConfigOptions {
@@ -507,8 +508,8 @@ abstract class ConfigOptions {
         urlTestInterval: ref.watch(urlTestInterval),
         enableClashApi: ref.watch(enableClashApi),
         clashApiPort: ref.watch(clashApiPort),
-        enableTun: mode == ServiceMode.tun && !Platform.isMacOS,
-        enableTunService: (mode == ServiceMode.tun && Platform.isMacOS) || mode == ServiceMode.tunService,
+        enableTun: mode == ServiceMode.tun && (!Platform.isMacOS || _isElevatedOnMac()),
+        enableTunService: mode == ServiceMode.tun && Platform.isMacOS && !_isElevatedOnMac(),
         setSystemProxy: mode == ServiceMode.systemProxy,
         bypassLan: ref.watch(bypassLan),
         allowConnectionFromLan: ref.watch(allowConnectionFromLan),
@@ -588,4 +589,15 @@ class ConfigOptionRepository with ExceptionHandler, InfraLogger {
       ConfigOptionUnexpectedFailure.new,
     );
   }
+}
+
+bool _isElevatedOnMac() {
+  if (Platform.isMacOS) {
+    try {
+      return geteuid() == 0;
+    } catch (_) {
+      return false;
+    }
+  }
+  return false;
 }

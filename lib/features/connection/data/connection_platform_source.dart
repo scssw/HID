@@ -52,7 +52,9 @@ class ConnectionPlatformSourceImpl
         final euid = geteuid();
         return euid == 0;
       } else if (Platform.isMacOS) {
-        return true;
+        final euid = geteuid();
+        if (euid == 0) return true;
+        return File('/Library/LaunchDaemons/HiddifyTunnelService.plist').existsSync();
       } else {
         return true;
       }

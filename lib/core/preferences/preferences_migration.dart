@@ -52,6 +52,7 @@ class PreferencesVersion1Migration extends PreferencesMigrationStep
         case final String serviceMode) {
       final newMode = switch (serviceMode) {
         "proxy" || "system-proxy" || "vpn" => serviceMode,
+        "vpn-service" => "vpn",
         "systemProxy" => "system-proxy",
         "tun" => "vpn",
         _ => PlatformUtils.isDesktop ? "system-proxy" : "vpn",

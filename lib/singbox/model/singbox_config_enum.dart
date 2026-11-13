@@ -8,8 +8,7 @@ import 'package:hiddify/utils/platform_utils.dart';
 enum ServiceMode {
   proxy("proxy"),
   systemProxy("system-proxy"),
-  tun("vpn"),
-  tunService("vpn-service");
+  tun("vpn");
 
   const ServiceMode(this.key);
 
@@ -34,15 +33,12 @@ enum ServiceMode {
         systemProxy => t.config.serviceModes.systemProxy,
         tun =>
           "${t.config.serviceModes.tun}${isExperimental ? " (${t.settings.experimental})" : ""}",
-        tunService =>
-          "${t.config.serviceModes.tunService}${isExperimental ? " (${t.settings.experimental})" : ""}",
       };
 
   String presentShort(TranslationsEn t) => switch (this) {
         proxy => t.config.shortServiceModes.proxy,
         systemProxy => t.config.shortServiceModes.systemProxy,
         tun => t.config.shortServiceModes.tun,
-        tunService => t.config.shortServiceModes.tunService,
       };
 }
 

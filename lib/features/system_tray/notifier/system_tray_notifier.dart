@@ -97,7 +97,7 @@ class SystemTrayNotifier extends _$SystemTrayNotifier with AppLogger {
               disabled: true,
             ),
 
-            ...ServiceMode.values.map(
+            ...ServiceMode.choices.map(
               (e) => MenuItem.checkbox(
                 checked: e == serviceMode,
                 key: e.name,
