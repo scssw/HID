@@ -93,6 +93,7 @@ jobs:
           cd macos
           pod install || true
           find Pods -type f \( -name "*.hpp" -o -name "*.h" -o -name "*.cpp" \) -exec sed -i '' -E 's/std::vector<const ([^>]+)>/std::vector<\1>/g' {} + 2>/dev/null || true
+          find Pods -name "SentryCrashMonitor_CPPException.cpp" -exec sed -i '' '1s/^/#include <exception>\n/' {} + 2>/dev/null || true
           cd ..
 
       - name: Build macOS DMG

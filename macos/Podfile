@@ -41,11 +41,21 @@ post_install do |installer|
   Dir.glob(File.join(installer.sandbox.root, 'Sentry', '**', '*.{h,hpp,cpp}')).each do |file|
     if File.file?(file)
       content = File.read(file)
+      changed = false
+
       if content.include?('std::vector<const ')
         puts "Patching Sentry C++ const vector in: #{file}"
         content.gsub!(/std::vector<\s*const\s+([^>]+)>/, 'std::vector<\1>')
-        File.write(file, content)
+        changed = true
       end
+
+      if file.end_with?('SentryCrashMonitor_CPPException.cpp') && !content.include?('#include <exception>')
+        puts "Patching Sentry #include <exception> in: #{file}"
+        content = "#include <exception>\n" + content
+        changed = true
+      end
+
+      File.write(file, content) if changed
     end
   end
 
