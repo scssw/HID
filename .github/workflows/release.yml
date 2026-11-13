@@ -23,7 +23,7 @@ permissions:
 jobs:
   build-macos:
     name: Build macOS (Universal)
-    runs-on: macos-14
+    runs-on: macos-latest
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -43,8 +43,8 @@ jobs:
 
       - name: Install macOS build dependencies
         run: |
-          brew install create-dmg tree
-          npm install -g appdmg
+          HOMEBREW_NO_AUTO_UPDATE=1 brew install create-dmg tree || true
+          npm install -g appdmg || true
           dart pub global activate flutter_distributor
           echo "$HOME/.pub-cache/bin" >> $GITHUB_PATH
 
