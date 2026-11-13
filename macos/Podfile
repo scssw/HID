@@ -37,8 +37,8 @@ target 'Runner' do
 end
 
 post_install do |installer|
-  # Fix Sentry C++20 allocator compatibility with Xcode 16.4+ (std::vector<const T> -> std::vector<T>)
-  Dir.glob(File.join(installer.sandbox.root, 'Sentry', '**', '*.{h,hpp,cpp}')).each do |file|
+  # Fix Sentry compatibility with Xcode 16.4+
+  Dir.glob(File.join(installer.sandbox.root, 'Sentry', '**', '*.{h,hpp,cpp,c,m,mm}')).each do |file|
     if File.file?(file)
       content = File.read(file)
       changed = false
@@ -52,6 +52,12 @@ post_install do |installer|
       if file.end_with?('SentryCrashMonitor_CPPException.cpp') && !content.include?('#include <exception>')
         puts "Patching Sentry #include <exception> in: #{file}"
         content = "#include <exception>\n" + content
+        changed = true
+      end
+
+      if file.end_with?('SentryCrashMachineContext.c') && !content.include?('<sys/_types/_ucontext64.h>')
+        puts "Patching Sentry #include <sys/_types/_ucontext64.h> in: #{file}"
+        content = "#include <sys/_types/_ucontext64.h>\n" + content
         changed = true
       end
 
