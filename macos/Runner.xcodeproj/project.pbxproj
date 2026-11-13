@@ -341,7 +341,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "echo \"$PRODUCT_NAME.app\" > \"$PROJECT_DIR\"/Flutter/ephemeral/.app_filename && \"$FLUTTER_ROOT\"/packages/flutter_tools/bin/macos_assemble.sh embed\nif [ -f \"$PROJECT_DIR/../libcore/bin/HiddifyCli\" ]; then\n  mkdir -p \"$TARGET_BUILD_DIR/$PRODUCT_NAME.app/Contents/MacOS\"\n  cp -f \"$PROJECT_DIR/../libcore/bin/HiddifyCli\" \"$TARGET_BUILD_DIR/$PRODUCT_NAME.app/Contents/MacOS/HiddifyCli\"\n  chmod +x \"$TARGET_BUILD_DIR/$PRODUCT_NAME.app/Contents/MacOS/HiddifyCli\"\nfi\n";
+			shellScript = "echo \"$PRODUCT_NAME.app\" > \"$PROJECT_DIR\"/Flutter/ephemeral/.app_filename && \"$FLUTTER_ROOT\"/packages/flutter_tools/bin/macos_assemble.sh embed\n";
 		};
 		33C54E5BCA15F9B3C8DDCCD2 /* [CP] Check Pods Manifest.lock */ = {
 			isa = PBXShellScriptBuildPhase;
