@@ -67,7 +67,11 @@ jobs:
           fi
 
           echo "=== Compiling arm64 HiddifyCli ==="
-          GOOS=darwin GOARCH=arm64 go build -v -trimpath -tags "$TAGS" -ldflags="-w -s" -o bin/HiddifyCli ./cli 2>&1 || true
+          if ! GOOS=darwin GOARCH=arm64 go build -v -trimpath -tags "$TAGS" -ldflags="-w -s" -o bin/HiddifyCli ./cli 2>&1 | tee /tmp/cli-arm64.log; then
+            ERR_MSG=$(tail -n 25 /tmp/cli-arm64.log | tr '\r\n' '  ')
+            echo "::error title=CLI_ARM64_BUILD_ERROR::$ERR_MSG"
+            exit 1
+          fi
 
           echo "=== Compiling amd64 libcore.dylib ==="
           printf '#!/bin/sh\nexec clang -arch x86_64 -mmacosx-version-min=10.15 "$@"\n' > /tmp/x86_64-clang
@@ -96,7 +100,7 @@ jobs:
 
           cd ..
           ls -lh libcore/bin/libcore.dylib
-          ls -lh libcore/bin/HiddifyCli || true
+          ls -lh libcore/bin/HiddifyCli
 
       - name: Prepare Flutter code generation & translations
         run: |

@@ -358,7 +358,9 @@ func setInbound(options *option.Options, opt *HiddifyOptions) {
 		inboundDomainStrategy = opt.IPv6Mode
 	}
 	if opt.EnableTunService {
-		ActivateTunnelService(*opt)
+		if ok, err := ActivateTunnelService(*opt); !ok || err != nil {
+			fmt.Printf("ActivateTunnelService failed: ok=%v, err=%v\n", ok, err)
+		}
 	} else if opt.EnableTun {
 		tunInbound := option.Inbound{
 			Type: C.TypeTun,

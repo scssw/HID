@@ -95,7 +95,7 @@ func startTunnelRequest(opt HiddifyOptions, installService bool) (bool, error) {
 	defer cancel()
 	_, _ = c.Stop(ctx, &pb.Empty{})
 	res, err := c.Start(ctx, &pb.TunnelStartRequest{
-		Ipv6:                   opt.IPv6Mode == option.DomainStrategy(dns.DomainStrategyUseIPv4),
+		Ipv6:                   opt.IPv6Mode != option.DomainStrategy(dns.DomainStrategyUseIPv4),
 		ServerPort:             int32(opt.InboundOptions.MixedPort),
 		StrictRoute:            opt.InboundOptions.StrictRoute,
 		EndpointIndependentNat: true,
@@ -191,10 +191,18 @@ func getTunnelServicePath() string {
 	case "windows":
 		fullPath = filepath.Join(binFolder, "HiddifyCli.exe")
 	case "darwin":
-		cli := filepath.Join(binFolder, "HiddifyCli")
-		if _, err := os.Stat(cli); err == nil {
-			fullPath = cli
-		} else {
+		candidates := []string{
+			filepath.Join(binFolder, "HiddifyCli"),
+			filepath.Join(binFolder, "..", "Frameworks", "HiddifyCli"),
+		}
+		for _, candidate := range candidates {
+			if info, err := os.Stat(candidate); err == nil && !info.IsDir() {
+				fullPath = candidate
+				break
+			}
+		}
+		if fullPath == "" {
+			log.Printf("WARNING: HiddifyCli not found in %v, falling back to %s", candidates, exePath)
 			fullPath = exePath
 		}
 	default:
