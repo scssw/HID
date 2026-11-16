@@ -10,6 +10,24 @@ subprojects {
     project.buildDir = "${rootProject.buildDir}/${project.name}"
 }
 subprojects {
+    afterEvaluate { project ->
+        if (project.hasProperty('android')) {
+            project.android {
+                if (namespace == null) {
+                    def manifestFile = project.file('src/main/AndroidManifest.xml')
+                    if (manifestFile.exists()) {
+                        def manifest = new XmlSlurper().parse(manifestFile)
+                        def pkg = manifest.@package.toString()
+                        if (pkg) {
+                            namespace = pkg
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+subprojects {
     project.evaluationDependsOn(':app')
 }
 
