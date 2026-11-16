@@ -22,11 +22,11 @@ apply_standard_settings(${BINARY_NAME})
 
 # Keep the Windows executable resource version aligned with the app release.
 # This also avoids stale Flutter-generated CMake cache values in local builds.
-set(FLUTTER_VERSION "3.0.19+30019")
+set(FLUTTER_VERSION "3.0.17+30017")
 set(FLUTTER_VERSION_MAJOR 3)
 set(FLUTTER_VERSION_MINOR 0)
-set(FLUTTER_VERSION_PATCH 19)
-set(FLUTTER_VERSION_BUILD 30019)
+set(FLUTTER_VERSION_PATCH 17)
+set(FLUTTER_VERSION_BUILD 30017)
 
 # Add preprocessor definitions for the build version.
 target_compile_definitions(${BINARY_NAME} PRIVATE "FLUTTER_VERSION=\"${FLUTTER_VERSION}\"")

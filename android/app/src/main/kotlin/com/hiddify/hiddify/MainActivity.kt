@@ -1,11 +1,14 @@
 package com.hiddify.hiddify
 
 import android.annotation.SuppressLint
+import android.content.Context
 import android.content.Intent
 import android.Manifest
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.net.VpnService
 import android.os.Build
+import android.provider.Settings as AndroidSettings
 import android.util.Log
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
@@ -75,7 +78,12 @@ class MainActivity : FlutterFragmentActivity(), ServiceConnection.Callback {
 
             val intent = Intent(Application.application, Settings.serviceClass())
             withContext(Dispatchers.Main) {
-                ContextCompat.startForegroundService(Application.application, intent)
+                try {
+                    ContextCompat.startForegroundService(Application.application, intent)
+                } catch (e: Exception) {
+                    Log.e(TAG, "Failed to start foreground service", e)
+                    onServiceAlert(Alert.StartService, e.message)
+                }
             }
         }
     }
@@ -90,8 +98,9 @@ class MainActivity : FlutterFragmentActivity(), ServiceConnection.Callback {
                 false
             }
         } catch (e: Exception) {
+            Log.e(TAG, "VpnService.prepare failed", e)
             onServiceAlert(Alert.RequestVPNPermission, e.message)
-            false
+            true
         }
     }
 
@@ -129,11 +138,42 @@ class MainActivity : FlutterFragmentActivity(), ServiceConnection.Callback {
     @SuppressLint("NewApi")
     private fun grantNotificationPermission() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            val prefs = getSharedPreferences("hiddify_permissions", Context.MODE_PRIVATE)
+            val askedBefore = prefs.getBoolean("asked_notification_permission", false)
+            val shouldShowRationale = ActivityCompat.shouldShowRequestPermissionRationale(
+                this,
+                Manifest.permission.POST_NOTIFICATIONS
+            )
+            if (askedBefore && !shouldShowRationale) {
+                // System will silently ignore requestPermissions on Samsung/Huawei/OPPO when permanently denied
+                openNotificationSettings()
+                onServiceAlert(Alert.RequestNotificationPermission, null)
+                return
+            }
+            prefs.edit().putBoolean("asked_notification_permission", true).apply()
             ActivityCompat.requestPermissions(
                 this,
                 arrayOf(Manifest.permission.POST_NOTIFICATIONS),
                 NOTIFICATION_PERMISSION_REQUEST_CODE
             )
+        }
+    }
+
+    private fun openNotificationSettings() {
+        try {
+            val intent = Intent().apply {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    action = AndroidSettings.ACTION_APP_NOTIFICATION_SETTINGS
+                    putExtra(AndroidSettings.EXTRA_APP_PACKAGE, packageName)
+                } else {
+                    action = AndroidSettings.ACTION_APPLICATION_DETAILS_SETTINGS
+                    data = Uri.fromParts("package", packageName, null)
+                }
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            startActivity(intent)
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to open notification settings", e)
         }
     }
 

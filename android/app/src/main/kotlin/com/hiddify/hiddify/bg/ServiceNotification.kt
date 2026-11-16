@@ -12,6 +12,7 @@ import android.os.Build
 import androidx.annotation.StringRes
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.MutableLiveData
 import com.hiddify.hiddify.Application
 import com.hiddify.hiddify.MainActivity
@@ -106,10 +107,15 @@ class ServiceNotification(private val status: MutableLiveData<Status>, private v
     }
 
     private fun registerReceiver() {
-        service.registerReceiver(this, IntentFilter().apply {
-            addAction(Intent.ACTION_SCREEN_ON)
-            addAction(Intent.ACTION_SCREEN_OFF)
-        })
+        ContextCompat.registerReceiver(
+            service,
+            this,
+            IntentFilter().apply {
+                addAction(Intent.ACTION_SCREEN_ON)
+                addAction(Intent.ACTION_SCREEN_OFF)
+            },
+            ContextCompat.RECEIVER_NOT_EXPORTED
+        )
         receiverRegistered = true
     }
 

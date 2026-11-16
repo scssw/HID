@@ -44,6 +44,9 @@ class DesktopHomeBody extends HookConsumerWidget {
     ref.listen(
       connectionNotifierProvider,
       (_, next) {
+        if (next case AsyncData(value: Disconnected())) {
+          isTopologyExpanded.value = false;
+        }
         if (next case AsyncError(:final error)) {
           if (error is MissingPrivilege ||
               error.toString().toLowerCase().contains("operation not permitted") ||
